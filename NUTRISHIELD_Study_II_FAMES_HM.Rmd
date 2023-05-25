@@ -1,0 +1,44 @@
+---
+title: "NUTRISHIELD_Study_II_FAMES_HM"
+author: "Parth Doshi"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Exploratory Data Analysis for NUTRISHIELD Study II FAMES Human Milk Sample
+
+## Required library
+
+```{r message=FALSE, warning=FALSE}
+# install required library
+library(devtools)
+devtools::install_github("sfirke/janitor")
+
+# load Required libraries
+library(tidyverse) # meta package of all tidyverse packages
+library(janitor) # 
+```
+
+## Data importing
+
+```{r}
+# Set Working Directory
+setwd("C:/Users/Parth Doshi/Dropbox/Thesis/R-script/EDA_for_Human_Mother_Milk")
+
+#load Data
+FAMES_HM_Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Thesis/Study2-Data/NUTRISHIELD_Study_II_FAMES_HM.csv",sep = ";", skip = 3)%>%
+  # Finding specific pattern to select the sample from data set
+  select(-String, -contains(c("NUTRISHIELD","X0"))) %>%
+  select_if(~ !any(is.na(.))) %>%
+  t() %>%
+  as.data.frame() %>%
+  row_to_names(1)
+```
+
+```{r}
+str()
+```
