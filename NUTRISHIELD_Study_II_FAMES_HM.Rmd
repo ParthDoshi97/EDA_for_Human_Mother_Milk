@@ -21,24 +21,103 @@ devtools::install_github("sfirke/janitor")
 # load Required libraries
 library(tidyverse) # meta package of all tidyverse packages
 library(janitor) # 
+library(ggplot2)
+library(corrplot)
+library(metan)
+library(caret)
+library(FactoMineR)
+library(ggfortify)
+library(factoextra)
+library(scatterplot3d)
+library(reshape2)
+
 ```
 
 ## Data importing
 
 ```{r}
 # Set Working Directory
-setwd("C:/Users/Parth Doshi/Dropbox/Thesis/R-script/EDA_for_Human_Mother_Milk")
+setwd("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/R-script/EDA_for_Human_Mother_Milk")
 
 #load Data
-FAMES_HM_Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Thesis/Study2-Data/NUTRISHIELD_Study_II_FAMES_HM.csv",sep = ";", skip = 3)%>%
+FAMES.HM.Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_FAMES_HM.csv",sep = ";", skip = 3)%>%
   # Finding specific pattern to select the sample from data set
   select(-String, -contains(c("NUTRISHIELD","X0"))) %>%
   select_if(~ !any(is.na(.))) %>%
   t() %>%
   as.data.frame() %>%
-  row_to_names(1)
+  row_to_names(1) %>%
+  mutate_if(names(.) != "Class", as.double) 
+
+
+FAMES.HM.Data <- rownames_to_column(FAMES.HM.Data,var = "Samples")
+
+write.csv(FAMES.HM.Data,"C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-clean-Data/NUTRISHIELD_Study_II_FAMES_HM.csv", row.names = FALSE)
 ```
 
 ```{r}
-str()
+str(FAMES.HM.Data)
+summary(FAMES.HM.Data)
+
+# Plot density plots to understand distribution of variable
+FAMES.HM.data_long <- gather(FAMES.HM.Data[3:38])
+ggplot(FAMES.HM.data_long, aes(x = value, y = key))+
+  geom_boxplot(outlier.colour = "red", outlier.shape = 1)
+
+
+```
+## Normalization of Data
+```{r}
+# Standardization of the data
+preproc <- preProcess(FAMES.HM.Data, method=c("center","scale"))
+FAMES.HM.Data.Norm <- predict(preproc,FAMES.HM.Data)
+
+#log transformation 
+FAMES.HM.Data.log <- log10(FAMES.HM.Data[3:38])
+FAMES>HM>Data.bind
+#density plot after normalization 
+FAMES.HM.Data.Norm.long <- gather(FAMES.HM.Data.Norm[3:38])
+ggplot(FAMES.HM.Data.Norm.long, aes(x = value, y = key))+
+  geom_boxplot(outlier.colour = "red", outlier.shape = 1)
+
+```
+## Explorataory data Analysis
+```{r}
+# Remove the variable which as zero variance
+FAMES.HM.Data.Norm <- FAMES.HM.Data.Norm %>%
+  select(-`Docosanoate (C22:0) (mM)`)
+
+# Principle component Analysis
+FAMES.HM.PCA <- prcomp(FAMES.HM.Data.Norm[3:37], scale. = FALSE)
+
+#Visualization of PCA
+fviz_pca_ind(FAMES.HM.PCA,
+             geom = "point",
+             habillage = FAMES.HM.Data.Norm$Class,
+             palette = c("black", "red", "green2","blue"),
+             addEllipses = TRUE,
+             ellipse.type="confidence",
+             ggtheme = theme_bw(),
+             title = "PCA plot for FAMES")
+
+#Scree plot 
+fviz_eig(FAMES.HM.PCA, 
+         addlabels = TRUE, 
+         ylim = c(0, 70),
+         main="Scree Plot")
+
+fviz_pca_var(FAMES.HM.PCA, col.var = "red")
+
+
+```
+
+##Multivariate Analysis of variance (MANOVA)
+```{r}
+yvars <-as.matrix(FAMES.HM.Data.Norm %>%
+  select(-Samples,-Class))
+class<- factor(FAMES.HM.Data.Norm$Class) 
+
+MAOV.Model3 <- manova(yvars ~ class, data = FAMES.HM.Data.Norm)
+MAOV.Model3
+summary.aov(MAOV.Model3)
 ```

@@ -13,32 +13,147 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Required library
 
-```{r mesasge=FALSE, warning=FALSE}
+```{r message=FALSE, warning=FALSE, paged.print=TRUE}
 # install required library
 library(devtools)
-devtools::install_github("sfirke/janitor")
+#devtools::install_github("sfirke/janitor")
+#install.packages("metan")
+
 
 # load Required libraries
 library(tidyverse) # meta package of all tidyverse packages
 library(janitor)
+library(ggplot2)
+library(corrplot)
+library(metan)
+library(caret)
+library(FactoMineR)
+library(ggfortify)
+library(factoextra)
+library(scatterplot3d)
+library(reshape2)
+library(gridExtra)
+
+
 ```
 
 ## Data importing
 
 ```{r}
 # Set Working Directory
-setwd("C:/Users/Parth Doshi/Dropbox/Thesis/R-script/EDA_for_Human_Mother_Milk")
+setwd("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/R-script/EDA_for_Human_Mother_Milk")
 
 #load Data
-SCFA_Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Thesis/Study2-Data/NUTRISHIELD_Study_II_SCFA_Urine.csv",
- sep = ";", skip = 3) %>%
+SCFA.Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_SCFA_Urine.csv",
+ sep = ";", skip = 3) 
+
+str(SCFA.Data)
+```
+
+## Data Preprocessing
+
+```{r message=TRUE, warning=FALSE, paged.print=TRUE}
+
+# Data cleaning remove rest of clinical data
+SCFA.Data <- SCFA.Data %>%
   # Finding specific pattern to select the sample from data set
   select(Sample, contains(c("IU", "MU"))) %>%
   t() %>%
   as.data.frame() %>%
-  row_to_names(1)
+  row_to_names(1) %>%
+  mutate_if(names(.) != "Class", as.numeric) %>%
+  rownames_to_column(var = "Sample")
+
+summary(SCFA.Data)
+
+
+# Write CSV to save clean Data
+#write.csv(SCFA_Data,"C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD #thesis)/Study2-clean-Data/NUTRISHIELD_Study_II_SCFA_Urine.csv", row.names = FALSE)
+
+
+# Plot density plots for each column
+
+SCFA.Data.Density1 <- gather(SCFA.Data[3:13])
+ggplot(SCFA.Data.Density1, aes(x=value, fill=key)) +
+  geom_density(alpha =0.25)+
+  xlim(0,20)+
+  ylim(0,2)
 ```
 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#Drop Acetic Acid Column which large no of missing values
+SCFA.Data <- SCFA.Data %>%
+  select(-`Acetic (umol/gcreat)`)
+
+
+#normalization of the Data using range
+SCFA.Data.Normalise.log <- log10(SCFA.Data[3:13])
+SCFA.Data.Normalise.log <- cbind(SCFA.Data[1:2],SCFA.Data.Normalise.log)
+SCFA.Data.Normalise.log[sapply(SCFA.Data.Normalise.log, is.infinite)] <- 0
+
+
+# Density Plot
+SCFA.density.data <- melt(SCFA.Data.Normalise.log[3:13])
+ggplot(SCFA.density.data, aes(x=value, fill=variable)) +
+  geom_density(alpha=0.25) +
+  facet_wrap(~ variable)
+
+```
+
+##Exploratory Data Analysis
+
 ```{r}
-str(SCFA_Data)
+# remove the isovaleric which has most of values lie at 0 concenctraion
+SCFA.Data.Normalise.log <- SCFA.Data.Normalise.log %>%
+  select(-`Isovaleric (umol/gcreat)`)
+
+#correlation of  variable 
+corrrlation.SCFA <- round(cor(SCFA.Data.Normalise.log[3:12]),2)
+melted_correlation <- melt(corrrlation.SCFA)
+
+#create correlation heat map
+ggplot(data = melted_correlation, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() +
+  geom_text(aes(Var2, Var1, label = value), size = 5) +
+  scale_fill_gradient2(low = "blue", high = "red",
+                       limit = c(-1,1), name="Correlation") +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        panel.background = element_blank())
+
+
+# Principle component Analysis
+
+SCFA.PCA <- prcomp(SCFA.Data.Normalise.log[3:11], scale. = FALSE)
+
+#Visualization of PCA
+fviz_pca_ind(SCFA.PCA,
+             geom = "point",
+             habillage = SCFA.Data.Normalise.log$Class,
+             palette = c("black", "red", "green2"),
+             addEllipses = TRUE,
+             ellipse.type="confidence",,
+             ggtheme = theme_bw(),
+             title = "PCA plot for SCFA")
+
+#Scree plot 
+fviz_eig(SCFA.PCA, 
+         addlabels = TRUE, 
+         ylim = c(0, 70),
+         main="Figure 5: Scree Plot")
+
+fviz_pca_var(SCFA.PCA, col.var = "red")
+
+```
+
+##Multivariate Analysis of variance (MANOVA)
+
+```{r}
+yvars <-as.matrix(SCFA.Data.Normalise.log %>%
+  select(-Sample,-Class))
+class<- factor(SCFA.Data.Normalise.log$Class) 
+
+MAOV.Model1 <- manova(yvars ~ class, data = SCFA.Data.Normalise.log)
+MAOV.Model1
+summary.aov(MAOV.Model1)
 ```

@@ -13,31 +13,127 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Required library
 
-```{r mesasge=FALSE, warning=FALSE}
+```{r message=FALSE, warning=FALSE}
 # install required library
 library(devtools)
 devtools::install_github("sfirke/janitor")
 
 # load Required libraries
 library(tidyverse) # meta package of all tidyverse packages
-library(janitor) # 
+library(janitor)
+library(ggplot2)
+library(corrplot)
+library(metan)
+library(caret)
+library(FactoMineR)
+library(ggfortify)
+library(factoextra)
+library(scatterplot3d)
+library(reshape2)
 ```
 
 ## Data importing
 
 ```{r}
 # Set Working Directory
-setwd("C:/Users/Parth Doshi/Dropbox/Thesis/R-script/EDA_for_Human_Mother_Milk")
+setwd("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/R-script/EDA_for_Human_Mother_Milk")
 
 #load Data
-QTrap_Targetd_Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Thesis/Study2-Data/NUTRISHIELD_Study_II_QTrap_Targeted_Urine.csv",sep = ";", skip = 3) %>%
-  # Finding specfic pattern to select the sample from dataset
+QTrap.Targeted.Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_QTrap_Targeted_Urine.csv",sep = ";", skip = 3)
+
+str(QTrap.Targeted.Data)
+```
+
+## Data Prepossessing
+
+```{r}
+# Data Cleaning 
+QTrap.Targeted.Data <- QTrap.Targeted.Data %>%
+  # Finding specific pattern to select the sample from data set
   select(Sample, contains(c("IU", "MU"))) %>%
   t() %>%
   as.data.frame() %>%
-  row_to_names(1)
+  row_to_names(1) %>%
+  mutate_if(names(.) != "Class", as.double) %>%
+  rownames_to_column(var = "Samples")
+
+Qtrap.targeted.Data.long <- gather(QTrap.Targeted.Data[3:29])
+ggplot(Qtrap.targeted.Data.long, aes(x=value, fill=key)) +
+  geom_density(alpha =0.25)+
+  xlim(-1,20)+
+  ylim(0,2)
+
+# Save clean data
+write.csv(QTrap.Targeted.Data,"C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-clean-Data/NUTRISHIELD_Study_II_QTrap_Targeted.csv", row.names = FALSE)
 ```
 
-```{r} 
-str(QTrap_Targeted_Data)
+```{r}
+#Normalization and scaling Of Data
+QTrap.Targeted.Data.Normalise <- log10(QTrap.Targeted.Data[3:29])
+QTrap.Targeted.Data.Normalise[sapply(QTrap.Targeted.Data.Normalise, is.infinite)] <- 0
+summary(QTrap.Targeted.Data.Normalise)
+
+
+#Box plot
+Qtrap.targeted.Data1.Normalise.long <- gather(QTrap.Targeted.Data.Normalise[3:27])
+ggplot(Qtrap.targeted.Data1.Normalise.long, aes(x = value, y = key))+
+  geom_boxplot(outlier.colour = "red", outlier.shape = 1)
+
+
+# Remove the Feature which has Constance  or single throughout
+QTrap.Targeted.Data.Normalise <- QTrap.Targeted.Data.Normalise %>%
+  select(-`Quercetin (umol/g creat)`,-`Kaempferol (umol/g creat)`,-`Glycitein (umol/g creat)`,`Genistein (umol/g creat)`,-`Equol (umol/g creat)`, `Daidzein (umol/g creat)`) 
+
+QTrap.Targeted.Data.Normalise <- cbind(QTrap.Targeted.Data[1:2], QTrap.Targeted.Data.Normalise)
+```
+
+##Exploratory Data Analysis
+
+```{r}
+#correlation of variable 
+corrrlation.SCFA <- round(cor(QTrap.Targeted.Data.Normalise[3:23]),2)
+melted_correlation <- melt(corrrlation.SCFA)
+
+#create correlation heat map
+ggplot(data = melted_correlation, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() +
+  geom_text(aes(Var2, Var1, label = value), size = 5) +
+  scale_fill_gradient2(low = "blue", high = "red",
+                       limit = c(-1,1), name="Correlation") +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        panel.background = element_blank())
+
+# Principle component Analysis
+QTrap.Targeted.Data.Normalise.pca <- prcomp(QTrap.Targeted.Data.Normalise[3:23], scale. = FALSE)
+
+#Visualization of PCA
+fviz_pca_ind(QTrap.Targeted.Data.Normalise.pca,
+             geom = "point",
+             habillage = QTrap.Targeted.Data.Normalise$Class,
+             palette = c("blue", "red","yellow"),
+             addEllipses = TRUE,
+             ellipse.type="confidence",
+             ggtheme = theme_bw(),
+             title = "PCA plot for Qtrap targeted biomarkrs")
+
+#Scree plot 
+fviz_eig(QTrap.Targeted.Data.pca, 
+         addlabels = TRUE, 
+         ylim = c(0, 70),
+         main="Figure 5: Scree Plot Qtrap targeted")
+
+#Graph for variable
+fviz_pca_var(QTrap.Targeted.Data.pca, col.var = "red")
+```
+##Multivariate Analysis of variance (MANOVA)
+
+```{r}
+yvars <-as.matrix(QTrap.Targeted.Data.Normalise %>%
+  select(-Samples,-Class))
+class<- factor(QTrap.Targeted.Data.Normalise$Class) 
+
+MAOV.Model2 <- manova(yvars ~ class, data = QTrap.Targeted.Data.Normalise)
+MAOV.Model2
+summary.aov(MAOV.Model2)
 ```

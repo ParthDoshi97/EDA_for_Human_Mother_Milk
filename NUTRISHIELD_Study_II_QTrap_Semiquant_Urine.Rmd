@@ -21,23 +21,97 @@ devtools::install_github("sfirke/janitor")
 # load Required libraries
 library(tidyverse) # meta package of all tidyverse packages
 library(janitor) # 
+library(ggplot2)
+library(corrplot)
+library(metan)
+library(caret)
+library(FactoMineR)
+library(ggfortify)
+library(factoextra)
+library(reshape2)
 ```
 
 ## Data importing
 
 ```{r}
 # Set Working Directory
-setwd("C:/Users/Parth Doshi/Dropbox/Thesis/R-script/EDA_for_Human_Mother_Milk")
+setwd("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/R-script/EDA_for_Human_Mother_Milk")
 
 #load Data
-QTrap_Semiquant_Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Thesis/Study2-Data/NUTRISHIELD_Study_II_QTrap_Semiquant_Urine.csv",sep = ";", skip = 3) %>%
+QTrap_Semiquant_Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_QTrap_Semiquant_Urine.csv",sep = ";", skip = 3) %>%
   # Finding specific pattern to select the sample from data set
   select(Sample, contains(c("IU", "MU"))) %>%
   t() %>%
   as.data.frame() %>%
-  row_to_names(1)
+  row_to_names(1) %>%
+  mutate_if(names(.) != "Class", as.double) 
+QTrap_Semiquant_Data <- rownames_to_column(QTrap_Semiquant_Data, var = "Samples")
+
+summary(QTrap_Semiquant_Data)
 ```
 
 ```{r}
 str(QTrap_Semiquant_Data)
+```
+
+## Data Prepossessing
+
+Normalization and scaling Of Data
+
+```{r}
+#Normalization and scaling Of Data
+QTrap.Semiquant.Data.normalise <- log10(QTrap_Semiquant_Data[3:207])
+QTrap.Semiquant.Data.normalise[sapply(QTrap.Semiquant.Data.normalise, is.infinite)] <- 0
+
+summary(QTrap.Semiquant.Data.normalise)
+
+# box-plot 
+QTrap.Semiquant.Data1.normalise.long <- gather(QTrap.Semiquant.Data.normalise[1:50])
+QTrap.Semiquant.Data2.normalise.long <- gather(QTrap.Semiquant.Data.normalise[52:100])
+QTrap.Semiquant.Data3.normalise.long <- gather(QTrap.Semiquant.Data.normalise[101:150])
+QTrap.Semiquant.Data4.normalise.long <- gather(QTrap.Semiquant.Data.normalise[151:205])
+
+ggplot(QTrap.Semiquant.Data1.normalise.long, aes(x = value, y = key))+
+  geom_boxplot(outlier.colour = "blue", outlier.shape = 1)
+ggplot(QTrap.Semiquant.Data2.normalise.long, aes(x = value, y = key))+
+  geom_boxplot(outlier.colour = "red", outlier.shape = 1)
+ggplot(QTrap.Semiquant.Data3.normalise.long, aes(x = value, y = key))+
+  geom_boxplot(outlier.colour = "green", outlier.shape = 1)
+ggplot(QTrap.Semiquant.Data4.normalise.long, aes(x = value, y = key))+
+  geom_boxplot(outlier.colour = "yellow", outlier.shape = 1)
+
+
+
+
+```
+
+```{r}
+# remove the column which show no variance
+QTrap.Semiquant.Data.normalise <- QTrap.Semiquant.Data.normalise %>%
+  select(-`alfa-CHA`,-`alfa-SOL`)
+QTrap.Semiquant.Data.normalise <- cbind(QTrap_Semiquant_Data[1:2], QTrap.Semiquant.Data.normalise)
+summary(QTrap.Semiquant.Data.normalise)
+```
+
+```{r}
+# Principle component Analysis
+QTrap.Semiquant.Data.pca <- prcomp(QTrap.Semiquant.Data.normalise[3:205], scale. = FALSE)
+
+#Visualization of PCA
+fviz_pca_ind(QTrap.Semiquant.Data.pca,
+             geom = "point",
+             habillage = QTrap.Semiquant.Data.normalise$Class,
+             palette = c("black", "red", "green2","blue"),
+             addEllipses = TRUE,
+             ggtheme = theme_bw(),
+             title = "PCA plot for Qtrap Semiquant biomarkrs")
+
+#Scree plot 
+fviz_eig(QTrap.Semiquant.Data.pca, 
+         addlabels = TRUE, 
+         ylim = c(0, 70),
+         main="Figure 5: Scree Plot  Qtrap Semiquant ")
+
+#Graph for variable
+fviz_pca_var(QTrap.Semiquant.Data.pca, col.var = "red")
 ```

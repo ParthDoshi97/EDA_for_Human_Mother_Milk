@@ -21,24 +21,114 @@ devtools::install_github("sfirke/janitor")
 # load Required libraries
 library(tidyverse) # meta package of all tidyverse packages
 library(janitor) # 
+library(ggplot2)
+library(corrplot)
+library(metan)
+library(caret)
+library(FactoMineR)
+library(ggfortify)
+library(factoextra)
+library(scatterplot3d)
+library(reshape2)
+
 ```
 
 ## Data importing
 
 ```{r}
 # Set Working Directory
-setwd("C:/Users/Parth Doshi/Dropbox/Thesis/R-script/EDA_for_Human_Mother_Milk")
+setwd("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/R-script/EDA_for_Human_Mother_Milk")
 
 #load Data
-MIRIS_HM_Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Thesis/Study2-Data/NUTRISHIELD_Study_II_MIRIS_HM.csv",sep = ";", skip = 3)%>%
+MIRIS.HM.Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_MIRIS_HM.csv",sep = ",", skip = 2)%>%
   # Finding specific pattern to select the sample from data set
-  select(-String, -contains(c("NUTRISHIELD","X0"))) %>%
+  select(-String, -contains(c("NUTRISHIELD","X0","Muestra"))) %>%
   select_if(~ !any(is.na(.))) %>%
   t() %>%
   as.data.frame() %>%
-  row_to_names(1)
+  row_to_names(1) %>%
+  mutate_all(as.numeric)
+   
+
+MIRIS.HM.Data <- rownames_to_column(MIRIS.HM.Data,var = "Samples")
+
+write.csv(MIRIS.HM.Data,"C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-clean-Data/NUTRISHIELD_Study_II_MIRIS_HM.csv")
 ```
 
 ```{r}
-str()
+str(MIRIS.HM.Data)
+
+
+# Plot density plots for each column
+par(mfrow = c(3, 3))  # Set the layout to a 1x3 grid
+for (col in 2:ncol(MIRIS.HM.Data)) {
+  density_data <- density(MIRIS.HM.Data[, col])
+  plot(density_data, main = colnames(MIRIS.HM.Data)[col], xlab = "Values", ylab = "Density")
+}
+```
+
+```{r}
+summary(MIRIS.HM.Data)
+```
+
+## Data Prepossessing
+
+Normalization and scaling Of Data
+
+```{r}
+# Normalization of data using min-max Normalization method 
+# custom function to implement min max scaling
+MinMaxNormalization  <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+#normalization of the data
+MIRIS.HM.Normalise <- as.data.frame(lapply(MIRIS.HM.Data[2:7], MinMaxNormalization))
+# Combined Class and Sample to normalize data
+MIRIS.HM.Normalise <- cbind(MIRIS.HM.Data$Samples, MIRIS.HM.Normalise)
+summary.data.frame(MIRIS.HM.Normalise)
+
+
+par(mfrow = c(3, 3))  # Set the layout to a 1x3 grid
+for (col in 2:ncol(MIRIS.HM.Normalise)) {
+  density_data <- density(MIRIS.HM.Normalise[, col])
+  plot(density_data, main = colnames(MIRIS.HM.Normalise)[col], xlab = "Values", ylab = "Density")
+}
+```
+
+##Exploratory Data Analysis
+
+```{r}
+
+#correlation of  variable 
+correlated.vars <- round(cor(MIRIS.HM.Normalise[2:7],method = "pearson"), 2)
+melted_correlation <- melt(correlated.vars)
+
+#create correlation heatmap
+ggplot(data = melted_correlation, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() +
+  geom_text(aes(Var2, Var1, label = value), size = 5) +
+  scale_fill_gradient2(low = "blue", high = "red",
+                       limit = c(-1,1), name="Correlation") +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        panel.background = element_blank())
+
+
+
+# PCA plot 
+MIRIS.HM.PCA <- prcomp(MIRIS.HM.Normalise[2:7], scale. = FALSE)
+
+#Scree plot 
+fviz_eig(MIRIS.HM.PCA, 
+         addlabels = TRUE, 
+         ylim = c(0, 70),
+         main="Scree Plot for MIRIS HUMAN MILK")
+
+fviz_pca_var(MIRIS.HM.PCA, col.var = "red")
+
+
+
+# ANOVA  Test 
+
+
 ```
