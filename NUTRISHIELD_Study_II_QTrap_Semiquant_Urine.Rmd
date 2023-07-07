@@ -6,14 +6,16 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(dev = "png",
+                      dpi = 300,
+                      echo = TRUE,
+                      cache = TRUE)
 ```
 
 ## Exploratory Data Analysis for NUTRISHIELD Study II Q trap Semiquant Urine Sample
-
 ## Required library
 
-```{r mesasge=FALSE, warning=FALSE}
+```{r Library, warning=FALSE, include=FALSE, mesasge=FALSE}
 # install required library
 library(devtools)
 devtools::install_github("sfirke/janitor")
@@ -23,86 +25,154 @@ library(tidyverse) # meta package of all tidyverse packages
 library(janitor) # 
 library(ggplot2)
 library(corrplot)
-library(metan)
+library(ggcorrplot)
 library(caret)
 library(FactoMineR)
 library(ggfortify)
 library(factoextra)
 library(reshape2)
+library(moments)
+library(skimr)
+library(car)
 ```
 
 ## Data importing
 
-```{r}
+```{r message=FALSE, warning=TRUE, paged.print=TRUE}
 # Set Working Directory
 setwd("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/R-script/EDA_for_Human_Mother_Milk")
 
 #load Data
-QTrap_Semiquant_Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_QTrap_Semiquant_Urine.csv",sep = ";", skip = 3) %>%
-  # Finding specific pattern to select the sample from data set
-  select(Sample, contains(c("IU", "MU"))) %>%
-  t() %>%
-  as.data.frame() %>%
-  row_to_names(1) %>%
-  mutate_if(names(.) != "Class", as.double) 
-QTrap_Semiquant_Data <- rownames_to_column(QTrap_Semiquant_Data, var = "Samples")
+QTrap.Semiquant.Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_QTrap_Semiquant_Urine.csv",sep = ",", skip = 2) 
 
-summary(QTrap_Semiquant_Data)
+str(QTrap.Semiquant.Data)
 ```
 
+## Data cleaning
+
 ```{r}
-str(QTrap_Semiquant_Data)
+#  Cleaning the data sets 
+QTrap.Semiquant.Data <- QTrap.Semiquant.Data %>%
+  select(-c(1:7), -c(9:13)) %>% # Select columns with names containing "IU" or "MU" 
+  t() %>% # Transpose the data Frame
+  as.data.frame() %>%
+  row_to_names(1) %>% # Use the first row as column names
+  mutate_if(names(.) != "Class", as.double)
+
+# Add a new column named "Samples" with row names
+QTrap.Semiquant.Data <-rownames_to_column(QTrap.Semiquant.Data, var = "Samples")
+
+# Print summary of QTrap Semiquant Data
+ summary(QTrap.Semiquant.Data)
+```
+```{r warning=FALSE}
+
+# Calculate the percentage of missing values for each column
+missing.percent <- colSums(QTrap.Semiquant.Data == 0 | QTrap.Semiquant.Data == 0.0) / nrow(QTrap.Semiquant.Data) * 100
+
+# Print the percentage of missing values for each column
+print(missing.percent)
+
+# Get the names of columns with missing values exceeding 50%
+missing.variables <- names(missing.percent[missing.percent > 50])
+
+# Print the names of columns with missing values exceeding 50%
+print(missing.variables)
+
+
+```
+
+### Remove feature with constant value
+
+```{r paged.print=TRUE}
+# Assuming your dataset is named 'data'
+Qtrap.filterd.data <- QTrap.Semiquant.Data[, !names(QTrap.Semiquant.Data) %in% missing.variables]
+skimmed <- skim_to_wide(Qtrap.filterd.data)
+skimmed
 ```
 
 ## Data Prepossessing
 
-Normalization and scaling Of Data
+```{r}
+skewness(Qtrap.filterd.data[3:54])
+```
 
 ```{r}
 #Normalization and scaling Of Data
-QTrap.Semiquant.Data.normalise <- log10(QTrap_Semiquant_Data[3:207])
-QTrap.Semiquant.Data.normalise[sapply(QTrap.Semiquant.Data.normalise, is.infinite)] <- 0
+QTrap.Semiquant.Data.normalise <- log10(Qtrap.filterd.data[3:54])
+# Replacing the value Infinite value  with 0 
+for (col in names(QTrap.Semiquant.Data.normalise)) {
+  QTrap.Semiquant.Data.normalise[[col]][!is.finite(QTrap.Semiquant.Data.normalise[[col]])] <- 0
+}
+QTrap.Semiquant.Data.normalise <- cbind(QTrap.Semiquant.Data[1:2],QTrap.Semiquant.Data.normalise)
 
-summary(QTrap.Semiquant.Data.normalise)
+# Calculate the skewness of the scaled data
+skewness(QTrap.Semiquant.Data.normalise[3:54])
 
-# box-plot 
-QTrap.Semiquant.Data1.normalise.long <- gather(QTrap.Semiquant.Data.normalise[1:50])
-QTrap.Semiquant.Data2.normalise.long <- gather(QTrap.Semiquant.Data.normalise[52:100])
-QTrap.Semiquant.Data3.normalise.long <- gather(QTrap.Semiquant.Data.normalise[101:150])
-QTrap.Semiquant.Data4.normalise.long <- gather(QTrap.Semiquant.Data.normalise[151:205])
+# Summary statistics
+skimmed_normal <-skim_to_wide(QTrap.Semiquant.Data.normalise)
+skimmed_normal
+```
 
-ggplot(QTrap.Semiquant.Data1.normalise.long, aes(x = value, y = key))+
-  geom_boxplot(outlier.colour = "blue", outlier.shape = 1)
-ggplot(QTrap.Semiquant.Data2.normalise.long, aes(x = value, y = key))+
-  geom_boxplot(outlier.colour = "red", outlier.shape = 1)
-ggplot(QTrap.Semiquant.Data3.normalise.long, aes(x = value, y = key))+
-  geom_boxplot(outlier.colour = "green", outlier.shape = 1)
-ggplot(QTrap.Semiquant.Data4.normalise.long, aes(x = value, y = key))+
-  geom_boxplot(outlier.colour = "yellow", outlier.shape = 1)
+### Visualization of Data 
 
+```{r}
+QTrap.Semiquant.Data.normalise.longA <- gather(QTrap.Semiquant.Data.normalise[3:25])
+QTrap.Semiquant.Data.normalise.longB <- gather(QTrap.Semiquant.Data.normalise[26:54])
 
+# box plot after distribution for Subset 
+QTrap.Semiquant.Data.normalise.boxplotA <- ggplot(QTrap.Semiquant.Data.normalise.longA, aes(x = value, y = key, fill = key))+
+  geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
+  labs(title = "Qtrap filtered data Boxplot",)
+print(QTrap.Semiquant.Data.normalise.boxplotA)
+
+# box plot after distribution for Subset 
+QTrap.Semiquant.Data.normalise.boxplotB <- ggplot(QTrap.Semiquant.Data.normalise.longB, aes(x = value, y = key, fill = key))+
+  geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
+  labs(title = "Qtrap filtered data Boxplot",)
+print(QTrap.Semiquant.Data.normalise.boxplotB)
 
 
 ```
 
 ```{r}
-# remove the column which show no variance
-QTrap.Semiquant.Data.normalise <- QTrap.Semiquant.Data.normalise %>%
-  select(-`alfa-CHA`,-`alfa-SOL`)
-QTrap.Semiquant.Data.normalise <- cbind(QTrap_Semiquant_Data[1:2], QTrap.Semiquant.Data.normalise)
-summary(QTrap.Semiquant.Data.normalise)
+
+QTrap.Semiquant.Data.normalise.subset.A <- QTrap.Semiquant.Data.normalise %>% 
+  select(-c(26:54))
+
+QTrap.Semiquant.Data.normalise.subset.B <- QTrap.Semiquant.Data.normalise %>% 
+  select(-c(3:25))
+
+# Box plot of data distribution of each group (Mother , PI , TI)
+QTrap.Semiquant.Data.normalise.subset.A %>%
+  gather(key = "feature", value = "value", -Samples, -Class) %>%
+  ggplot(aes(x = Class, y = value, fill = Class)) +
+  geom_boxplot() +
+  facet_wrap(~ feature, scales = "free") +
+  labs(x = "Group", y = "Value")
+
+
+QTrap.Semiquant.Data.normalise.subset.B %>%
+  gather(key = "feature", value = "value", -Samples, -Class) %>%
+  ggplot(aes(x = Class, y = value, fill = Class)) +
+  geom_boxplot() +
+  facet_wrap(~ feature, scales = "free") +
+  labs(x = "Group", y = "Value")
 ```
 
-```{r}
+## EDA
+
+```{r echo=FALSE}
 # Principle component Analysis
-QTrap.Semiquant.Data.pca <- prcomp(QTrap.Semiquant.Data.normalise[3:205], scale. = FALSE)
+QTrap.Semiquant.Data.pca <- prcomp(QTrap.Semiquant.Data.normalise[3:54], scale. = TRUE, center = TRUE)
 
 #Visualization of PCA
 fviz_pca_ind(QTrap.Semiquant.Data.pca,
              geom = "point",
              habillage = QTrap.Semiquant.Data.normalise$Class,
-             palette = c("black", "red", "green2","blue"),
+             palette = c( "red", "green2","blue"),
              addEllipses = TRUE,
+             ellipse_type = "confidence",
              ggtheme = theme_bw(),
              title = "PCA plot for Qtrap Semiquant biomarkrs")
 
@@ -114,4 +184,110 @@ fviz_eig(QTrap.Semiquant.Data.pca,
 
 #Graph for variable
 fviz_pca_var(QTrap.Semiquant.Data.pca, col.var = "red")
+```
+
+#### corelation
+
+```{r echo=FALSE}
+# Calculate p-values for each correlation coefficient
+#p.mat <- cor_pmat(QTrap.Semiquant.Data.normalise[3:38], method = "pearson")
+# calculate correlation matrix
+correlationMatrix <- cor(QTrap.Semiquant.Data.normalise[3:54])
+# summarize the correlation matrix
+#print(correlationMatrix)
+corrplot(correlationMatrix, method = "color")
+```
+
+### Statistical Test
+
+```{r echo=TRUE}
+
+# Perform Shapiro-Wilk test for each numeric variable to check normalitty
+for (i in 3:ncol(QTrap.Semiquant.Data.normalise)) {
+  result <- shapiro.test(QTrap.Semiquant.Data.normalise[, i])
+  print(result)
+}
+
+# Factor the  class 
+QTrap.Semiquant.Data.normalise$Class <- factor(QTrap.Semiquant.Data.normalise$Class)
+
+# define the  Contentious Variables
+continuous.vars <- c("`EC-G`", "`1,7-DMU`", "`1-MeHis`", "`1-MU`", "`1-MX`", "`2-Aph`", "`2-FG`",
+                    "`3-MeHis`", "`3-MX`", "`4-HPB`", "`5-HMFG`", "ANS", "AsB", "CF", "CARN",
+                    "CRN", "`cLeu-Pro`", "`cPro-Val`", "`L-CAR`", "`N-MePYR`", "PB", "TB",
+                    "`TF-PX`", "TRIGO", "HBA", "`HBA-S`", "HPAA", "`HPAA-S1`", "`3-HPHPA`",
+                    "HPPA", "THPV", "`3,4-DHPAA`", "`DHPV-S`", "`3-HHA`", "`4-HHA`", "`4-MeCAT-S`",
+                    "BA", "`CA-S`", "`CAT-S`", "`Et-S`", "FA", "`GA-S`", "HA", "HVAlc", "`HPPA-S`",
+                    "`MeGA-S`", "`MePYR-S`", "`2-HPA-S`", "`COU-G`", "`COU-S`", "`SYR-S`", "TAR")
+
+categorial.var <- "Class"
+
+# Perform levene's test
+for (Vars in continuous.vars) {
+  formula <- as.formula(paste(Vars, "~", categorial.var))
+ var_Test <-leveneTest(formula, data = QTrap.Semiquant.Data.normalise)
+  cat("Variable:",Vars, "\n")
+  print(var_Test)
+  cat("\n")
+}
+
+# Perform Kruskal-Wallis test for each variable
+for (vars in continuous.vars) {
+  formula <- as.formula(paste(vars, "~", categorial.var))
+  kruskal_model <- kruskal.test(formula, data = QTrap.Semiquant.Data.normalise)
+  cat("Variable:", vars, "\n")
+  print(kruskal_model)
+  cat("\n")
+}
+
+
+# Perform ANOVA and display summary for each model
+for (Vars in continuous.vars) {
+  formula <- as.formula(paste(Vars, "~", categorial.var))
+  aov.model <-aov(formula, data = QTrap.Semiquant.Data.normalise)
+  Tuckey.test <- TukeyHSD(aov.model)
+  cat("Variable:",Vars, "\n")
+  print(summary(aov.model))
+  print(Tuckey.test)
+  cat("\n")
+}
+```
+
+### Regression
+
+```{r}
+# Perform Regression for each continuous variable
+for (Vars in continuous.vars) {
+  formula <- as.formula(paste(Vars, "~", categorial.var))
+  LM.model <-lm(formula, data = QTrap.Semiquant.Data.normalise)
+  cat("Variable:",Vars, "\n")
+  print(summary(LM.model))
+  cat("\n")
+}
+```
+
+# feature Selection method
+
+```{r}
+set.seed(2000)
+# Define the control for recursive feature elimination (RFE) using random forest
+control <- rfeControl(functions = rfFuncs, method = "cv", number = 10)
+
+# Run the RFE algorithm
+results <- rfe(QTrap.Semiquant.Data.normalise[, 3:54], QTrap.Semiquant.Data.normalise[, 2], sizes = c(1:8), rfeControl = control)
+
+# Summarize the results
+print(results)
+
+# List the chosen features selected by RFE
+predictors(results)
+
+
+library(Boruta)
+# Decide if a variable is important or not using Boruta
+boruta_output <- Boruta(Class ~ ., data=na.omit(QTrap.Semiquant.Data.normalise), doTrace=2)  # perform Boruta search
+
+boruta_signif <- names(boruta_output$finalDecision[boruta_output$finalDecision %in% c("Confirmed", "Tentative")])  # collect Confirmed and Tentative variables
+
+plot(boruta_output, cex.axis=.7, las=2, xlab="", main="Variable Importance")  # plot variable
 ```

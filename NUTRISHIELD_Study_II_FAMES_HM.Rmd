@@ -6,7 +6,10 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(dev = "png",
+                      dpi = 300,
+                      echo = TRUE,
+                      cache = TRUE)
 ```
 
 ## Exploratory Data Analysis for NUTRISHIELD Study II FAMES Human Milk Sample
@@ -16,108 +19,288 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r message=FALSE, warning=FALSE}
 # install required library
 library(devtools)
-devtools::install_github("sfirke/janitor")
+#devtools::install_github("sfirke/janitor")
 
 # load Required libraries
 library(tidyverse) # meta package of all tidyverse packages
 library(janitor) # 
 library(ggplot2)
 library(corrplot)
-library(metan)
 library(caret)
+library(stringr)
 library(FactoMineR)
 library(ggfortify)
+library(ggcorrplot)
 library(factoextra)
-library(scatterplot3d)
 library(reshape2)
+library(Boruta)
+library(moments)
+library(skimr)
+library(car)
 
-```
-
-## Data importing
-
-```{r}
 # Set Working Directory
 setwd("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/R-script/EDA_for_Human_Mother_Milk")
+```
 
-#load Data
-FAMES.HM.Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_FAMES_HM.csv",sep = ";", skip = 3)%>%
-  # Finding specific pattern to select the sample from data set
-  select(-String, -contains(c("NUTRISHIELD","X0"))) %>%
+## Data importing & Cleaning 
+
+```{r}
+# Load the FAMES.HM.Data from the CSV file
+FAMES.HM.Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_FAMES_HM.csv", sep = ";", skip = 3) %>%
+  # Select relevant columns by excluding "String" and columns containing "NUTRISHIELD" or "X0"
+  select(-String, -contains(c("NUTRISHIELD", "X0"))) %>%
+  # Remove columns with any missing values
   select_if(~ !any(is.na(.))) %>%
+  # Transpose the data to convert it from wide to long format
   t() %>%
   as.data.frame() %>%
+  # Set the first row as column names
   row_to_names(1) %>%
-  mutate_if(names(.) != "Class", as.double) 
+  # Convert variables to numeric (except for the "Class" column)
+  mutate_if(names(.) != "Class", as.numeric)
 
 
-FAMES.HM.Data <- rownames_to_column(FAMES.HM.Data,var = "Samples")
+colnames(FAMES.HM.Data) <- gsub("\\s*\\(.*?\\)\\s*", "", colnames(FAMES.HM.Data))
 
-write.csv(FAMES.HM.Data,"C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-clean-Data/NUTRISHIELD_Study_II_FAMES_HM.csv", row.names = FALSE)
+# Remove any leading/trailing whitespaces from the column names
+colnames(FAMES.HM.Data) <- trimws(colnames(FAMES.HM.Data))
+
+# Add a new column "Samples" with row names
+FAMES.HM.Data <- rownames_to_column(FAMES.HM.Data, var = "Samples")
+
+# summary Stats
+skimmed_FAMES <- skim_to_wide(FAMES.HM.Data)
+skimmed_FAMES
+
+# Save the clean data to a new CSV file
+write.csv(FAMES.HM.Data, "C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-clean-Data/NUTRISHIELD_Study_II_FAMES_HM.csv", row.names = FALSE)
+
 ```
+
+### Remove feature with constant value
+```{r}
+check.constant.or.few.unique <- function(data) {
+ result <- vector("character", length = ncol(data))
+ 
+ for (i in 1:ncol(data)) {
+   column <- data[[i]]
+   
+   if (length(unique(column)) == 1) {
+     result[i] <- "Constant value"
+   } else if (length(unique(column)) <= 10) {
+     result[i] <- "Few unique values"
+   } else {
+     result[i] <- "No pattern"
+   }
+ }
+ pattern_columns <- names(data)[result != "No pattern"]
+ return(pattern_columns)
+}
+results <- check.constant.or.few.unique(FAMES.HM.Data)
+print(results)
+```
+
+### Remove the variable with constant value and few unique values 
 
 ```{r}
-str(FAMES.HM.Data)
-summary(FAMES.HM.Data)
+FAMES.HM.Data <- FAMES.HM.Data %>% 
+  select(-Undecanoate,-Tridecanoate,-Tricosanoate,-Heneicosanoate,-Docosanoate,-`cis-10-Pentadecenoic`,-`cis-11,14,17-Eicosatrienoic`)
 
-# Plot density plots to understand distribution of variable
-FAMES.HM.data_long <- gather(FAMES.HM.Data[3:38])
-ggplot(FAMES.HM.data_long, aes(x = value, y = key))+
-  geom_boxplot(outlier.colour = "red", outlier.shape = 1)
-
-
+# Checking Skewness 
+skewness(FAMES.HM.Data[3:31])
 ```
+
 ## Normalization of Data
-```{r}
-# Standardization of the data
-preproc <- preProcess(FAMES.HM.Data, method=c("center","scale"))
-FAMES.HM.Data.Norm <- predict(preproc,FAMES.HM.Data)
 
-#log transformation 
-FAMES.HM.Data.log <- log10(FAMES.HM.Data[3:38])
-FAMES>HM>Data.bind
-#density plot after normalization 
-FAMES.HM.Data.Norm.long <- gather(FAMES.HM.Data.Norm[3:38])
-ggplot(FAMES.HM.Data.Norm.long, aes(x = value, y = key))+
-  geom_boxplot(outlier.colour = "red", outlier.shape = 1)
+```{r}
+# Log Transformation 
+FAMES.HM.Data.Normal <- log10(FAMES.HM.Data[3:31])
+
+# Convert infinite values to 0
+for (col in names(FAMES.HM.Data.Normal)) {
+  FAMES.HM.Data.Normal[[col]][!is.finite(FAMES.HM.Data.Normal[[col]])] <- 0
+}
+
+skimmed_FAMES.normal <- skim_to_wide(FAMES.HM.Data.Normal)
+skimmed_FAMES.normal
+
+# check Skewness
+skewness(FAMES.HM.Data.Normal)
+FAMES.HM.Data.Normal <- cbind(FAMES.HM.Data[1:2], FAMES.HM.Data.Normal)
+
+# Converting it into long 
+FAMES.HM.Data.Normal.long <- gather(FAMES.HM.Data.Normal[3:15])
+FAMES.HM.Data.Normal.long.subset <- gather(FAMES.HM.Data.Normal[16:31])
+
+# box plot after distribution
+FAMES.HM.Data.Normal.boxplot.A <- ggplot(FAMES.HM.Data.Normal.long, aes(x = value, y = key, fill = key))+
+  geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
+  labs(title = "Scaled FAMES Data Boxplot",)
+print(FAMES.HM.Data.Normal.boxplot.A)
+
+
+# box plot after distribution
+FAMES.HM.Data.Normal.boxplot.B <- ggplot(FAMES.HM.Data.Normal.long.subset, aes(x = value, y = key, fill = key))+
+  geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
+  labs(title = "Scaled FAMES Data Boxplot",)
+print(FAMES.HM.Data.Normal.boxplot.B)
+```
+
+### Box plot of data distribution of each group (Post,Pre,PI,TI)
+
+```{r}
+FAMES.HM.Data.Normal1 <- subset(FAMES.HM.Data.Normal[1:10])
+FAMES.HM.Data.Normal2 <- cbind(FAMES.HM.Data.Normal[1:2],subset(FAMES.HM.Data.Normal[11:20]))
+FAMES.HM.Data.Normal3 <- cbind(FAMES.HM.Data.Normal[1:2],subset(FAMES.HM.Data.Normal[21:31]))
+
+# Box plot for 
+boxplot <- function(data){
+data %>%
+    gather(key = "feature", value = "value", -Samples, -Class) %>%
+    ggplot(aes(x = Class, y = value, fill = Class)) +
+    geom_boxplot() +
+    facet_wrap(~ feature, scales = "free") +
+    labs(x = "Group", y = "Value")
+}
+
+FAMES.HM.Boxplot.1 <- boxplot(FAMES.HM.Data.Normal1)
+print(FAMES.HM.Boxplot.1)
+FAMES.HM.Boxplot.2 <- boxplot(FAMES.HM.Data.Normal2)
+print(FAMES.HM.Boxplot.2)
+FAMES.HM.Boxplot.3 <- boxplot(FAMES.HM.Data.Normal3)
+print(FAMES.HM.Boxplot.3)
+```
+## Correlation plot 
+```{r}
+# Calculate p-values for each correlation coefficient
+p.mat <- cor_pmat(FAMES.HM.Data.Normal[3:31], method = "pearson")
+
+# Calculate correlation matrix using Pearson correlation
+correlationMatrix <- cor(FAMES.HM.Data.Normal[3:31], method = "pearson")
+
+# Visualize the correlation matrix using ggcorrplot
+ggcorrplot(
+  correlationMatrix,
+  hc.order = TRUE,   # Hierarchical clustering for reordering variables
+  type = "lower",    # Show only the lower triangle of the correlation matrix
+  lab = FALSE,        # Show labels for variables
+  p.mat = p.mat      # Overlay p-values on the plot
+)
+```
+
+### statistical tests to find relationship between categorical variable and a continuous variable.
+
+```{r}
+
+# Perform Shapiro-Wilk test for each numeric variable to check normalitty
+for (i in 3:ncol(FAMES.HM.Data.Normal)) {
+  result <- shapiro.test(FAMES.HM.Data.Normal[, i])
+  print(result)
+}
+
+# Get the names of the continuous variables
+continuous.vars <-c("Hexanoate","Octanoate","Decanoate","Laurate","Myristate",    "Myristoleate","Pentadecanoate","Palmitate","Palmitoleate",                 "Heptadecanoate","`cis-10-Heptadecenoic`","Stearate","Oleic","Elaidic","Linoleic",                        "Linolelaidic","`gamma-Linolenic`","Linolenic","Eicosanoic","`cis-11-Eicosenoic`",                  "`cis-11,14-Eicosadienoic`","`cis-8,11,14-Eicosatrienoic`","Arachidonic",                           "`cis-5,8,11,14,17-Eicosapentaenoic`","`Erucic acid`","`cis-13,16-Docosadienoic`",          "`cis-4,7,10,13,16,19-Docosahexaenoic`","Lignocerate","`Nervonic acid`")        
+
+categorical.var <- "Class"
+
+FAMES.HM.Data.Normal$Class <- factor(FAMES.HM.Data.Normal$Class,labels = c("Pre","Post","TI","PI"))
+
+# perform levene's test to see if all group has equal variance
+for (vars in continuous.vars) {
+  formula <- as.formula(paste(vars, "~", categorical.var))
+  var_test <- leveneTest(formula, data = FAMES.HM.Data.Normal)
+  cat("Variable:", vars, "\n")
+  print(var_test)
+  cat("\n")
+}
+
+# Perform Kruskal-Wallis test for each variable
+for (vars in continuous.vars) {
+  formula <- as.formula(paste(vars, "~", categorical.var))
+  kruskal_model <- kruskal.test(formula, data = FAMES.HM.Data.Normal)
+  cat("Variable:", vars, "\n")
+  print(kruskal_model)
+  cat("\n")
+}
+
+# Loop over each continuous variable
+for (var in continuous.vars) {
+# Create a formula specifying the relationship between the categorical variable and the current continuous variable
+  formula <- as.formula(paste(var, "~ Class"))
+  
+  # Fit the Anova
+  AOV.model <- aov(formula, data = FAMES.HM.Data.Normal)
+  tukey_TEST<- TukeyHSD(AOV.model)
+  # Print the variable name and the ANOVA table
+  cat("Variable:", var, "\n")
+  print(summary(AOV.model))
+  print(tukey_TEST)
+  cat("\n")
+}
+```
+
+#### Regression test
+
+```{r}
+for (var in continuous.vars) {
+  # Create a formula specifying the relationship between the continuous variable and the categorical variable
+  formula <- as.formula(paste(var, "~ Class"))
+  
+  # Fit the linear regression model
+  regression.model <- lm(formula, data = FAMES.HM.Data.Normal)
+  
+  # Print the regression coefficients and summary
+  cat("Variable:", var, "\n")
+  print(coef(regression.model))
+  cat("\n")
+  print(summary(regression.model))
+  cat("\n")
+}
 
 ```
-## Explorataory data Analysis
-```{r}
-# Remove the variable which as zero variance
-FAMES.HM.Data.Norm <- FAMES.HM.Data.Norm %>%
-  select(-`Docosanoate (C22:0) (mM)`)
 
-# Principle component Analysis
-FAMES.HM.PCA <- prcomp(FAMES.HM.Data.Norm[3:37], scale. = FALSE)
+##### Principle component Analysis
+```{r}
+FAMES.HM.PCA <- prcomp(FAMES.HM.Data.Normal[3:31], scale. = TRUE, center = TRUE)
 
 #Visualization of PCA
 fviz_pca_ind(FAMES.HM.PCA,
              geom = "point",
-             habillage = FAMES.HM.Data.Norm$Class,
-             palette = c("black", "red", "green2","blue"),
+             habillage = FAMES.HM.Data.Normal$Class,
+             palette = c("blue", "red","green","yellow"),
              addEllipses = TRUE,
              ellipse.type="confidence",
              ggtheme = theme_bw(),
-             title = "PCA plot for FAMES")
-
+             title = "PCA plot for HM Fatty Acids")
 #Scree plot 
 fviz_eig(FAMES.HM.PCA, 
          addlabels = TRUE, 
          ylim = c(0, 70),
-         main="Scree Plot")
+         main="Scree Plot Fatty Acids")
 
+#Graph for variable
 fviz_pca_var(FAMES.HM.PCA, col.var = "red")
-
-
 ```
 
-##Multivariate Analysis of variance (MANOVA)
+# feature selection
 ```{r}
-yvars <-as.matrix(FAMES.HM.Data.Norm %>%
-  select(-Samples,-Class))
-class<- factor(FAMES.HM.Data.Norm$Class) 
+FAMES.HM.Data.Normal$Class <- factor(FAMES.HM.Data.Normal$Class,labels = c("Pre","Post","TI","PI"))
 
-MAOV.Model3 <- manova(yvars ~ class, data = FAMES.HM.Data.Norm)
-MAOV.Model3
-summary.aov(MAOV.Model3)
+# define the control using a random forest selection function
+control <- rfeControl(functions=rfFuncs, method="cv", number=10)
+# run the RFE algorithm
+results <- rfe(FAMES.HM.Data.Normal[,3:29], FAMES.HM.Data.Normal[,2], sizes=c(1:29), rfeControl=control)
+# summarize the results
+print(results)
+# list the chosen features
+predictors(results)
+
+
+library(Boruta)
+# Decide if a variable is important or not using Boruta
+boruta_output <- Boruta(Class ~ ., data=na.omit(FAMES.HM.Data.Normal), doTrace=2)  # perform Boruta search
+
+boruta_signif <- names(boruta_output$finalDecision[boruta_output$finalDecision %in% c("Confirmed", "Tentative")])  # collect Confirmed and Tentative variables
+
+plot(boruta_output, cex.axis=.7, las=2, xlab="", main="Variable Importance")  # plot variable
 ```

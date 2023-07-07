@@ -6,35 +6,40 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(dev = "png",
+                      dpi = 300,
+                      echo = TRUE,
+                      cache = TRUE)
 ```
 
-## Exploratory Data Analysis for SCFA Urine Sample
+# Exploratory Data Analysis for SCFA Urine Sample
 
-## Required library
+#### Required library
 
 ```{r message=FALSE, warning=FALSE, paged.print=TRUE}
 # install required library
 library(devtools)
 #devtools::install_github("sfirke/janitor")
-#install.packages("metan")
-
+devtools::install_github("SkadiEye/deepTL")
 
 # load Required libraries
 library(tidyverse) # meta package of all tidyverse packages
 library(janitor)
+library(stringr)
 library(ggplot2)
 library(corrplot)
-library(metan)
 library(caret)
 library(FactoMineR)
 library(ggfortify)
 library(factoextra)
-library(scatterplot3d)
 library(reshape2)
 library(gridExtra)
-
-
+library(Boruta)
+library(ggbiplot)
+library(ggcorrplot)
+library(moments)
+library(skimr)
+library(car)
 ```
 
 ## Data importing
@@ -53,107 +58,272 @@ str(SCFA.Data)
 ## Data Preprocessing
 
 ```{r message=TRUE, warning=FALSE, paged.print=TRUE}
-
-# Data cleaning remove rest of clinical data
+# Data cleaning: Remove the rest of clinical data
 SCFA.Data <- SCFA.Data %>%
-  # Finding specific pattern to select the sample from data set
-  select(Sample, contains(c("IU", "MU"))) %>%
+  select(-c(1:7),-c(9:13,186), ) %>%
+  # Transpose the data frame
   t() %>%
+  # Convert the transposed data frame to a regular data frame
   as.data.frame() %>%
+  # Set the first row as column names
   row_to_names(1) %>%
+  # Convert all columns to numeric except the "Class" column
   mutate_if(names(.) != "Class", as.numeric) %>%
-  rownames_to_column(var = "Sample")
+  # Set the "Sample" column as a separate column named "Sample"
+  rownames_to_column(var = "Sample") %>%
+  # Remove the "(umol/gcreat)" from column names
+  rename_with(~str_remove(., "\\s*\\(umol\\/gcreat\\)"), everything())
 
-summary(SCFA.Data)
+# Print the summary of the cleaned SCFA.Data
+skimmes <- skim_to_list(SCFA.Data)
+skimmes
+# Write the cleaned data to a CSV file
+# write.csv(SCFA.Data,"C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD #thesis)/Study2-clean-Data/NUTRISHIELD_Study_II_SCFA_Urine.csv", row.names = FALSE)
 
-
-# Write CSV to save clean Data
-#write.csv(SCFA_Data,"C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD #thesis)/Study2-clean-Data/NUTRISHIELD_Study_II_SCFA_Urine.csv", row.names = FALSE)
-
-
-# Plot density plots for each column
-
-SCFA.Data.Density1 <- gather(SCFA.Data[3:13])
-ggplot(SCFA.Data.Density1, aes(x=value, fill=key)) +
-  geom_density(alpha =0.25)+
-  xlim(0,20)+
-  ylim(0,2)
 ```
 
-```{r echo=FALSE, message=FALSE, warning=FALSE}
-#Drop Acetic Acid Column which large no of missing values
+# Data cleaning
+
+```{r message=FALSE, warning=FALSE}
+# Drop the Acetic Acid column which has a large number of missing values
 SCFA.Data <- SCFA.Data %>%
-  select(-`Acetic (umol/gcreat)`)
+  select(-Acetic)
 
+# Data Distribution
+# Convert the data from wide to long format using the gather() function
+SCFA.Data.long <- gather(SCFA.Data[3:13])
 
-#normalization of the Data using range
-SCFA.Data.Normalise.log <- log10(SCFA.Data[3:13])
-SCFA.Data.Normalise.log <- cbind(SCFA.Data[1:2],SCFA.Data.Normalise.log)
-SCFA.Data.Normalise.log[sapply(SCFA.Data.Normalise.log, is.infinite)] <- 0
+# Create a boxplot using ggplot
+SCFA.Data.boxplot <- ggplot(SCFA.Data.long, aes(x = value, y = key, fill = key)) +
+  geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
+  labs(title = "Raw SCFA Data Boxplot")
 
+# Print the boxplot
+print(SCFA.Data.boxplot)
 
-# Density Plot
-SCFA.density.data <- melt(SCFA.Data.Normalise.log[3:13])
-ggplot(SCFA.density.data, aes(x=value, fill=variable)) +
-  geom_density(alpha=0.25) +
-  facet_wrap(~ variable)
+# Calculate the skewness of the columns in SCFA.Data
+skewness(SCFA.Data[3:13])
 
 ```
 
-##Exploratory Data Analysis
+### Normalization of the Data
 
 ```{r}
-# remove the isovaleric which has most of values lie at 0 concenctraion
-SCFA.Data.Normalise.log <- SCFA.Data.Normalise.log %>%
-  select(-`Isovaleric (umol/gcreat)`)
+# Apply scaling to the data
+# Convert the columns to log10 scale
+SCFA.Data.Scaled <- as.data.frame(log10(SCFA.Data[3:13]))
 
-#correlation of  variable 
-corrrlation.SCFA <- round(cor(SCFA.Data.Normalise.log[3:12]),2)
-melted_correlation <- melt(corrrlation.SCFA)
+# Replacing the value Infinite value  with 0 
+for (col in names(SCFA.Data.Scaled)) {
+  SCFA.Data.Scaled[[col]][!is.finite(SCFA.Data.Scaled[[col]])] <- 0
+}
+# Summary statistics
+skimmes_normal <- skim_to_list(SCFA.Data.Scaled)
+skimmes_normal
 
-#create correlation heat map
-ggplot(data = melted_correlation, aes(x=Var1, y=Var2, fill=value)) + 
-  geom_tile() +
-  geom_text(aes(Var2, Var1, label = value), size = 5) +
-  scale_fill_gradient2(low = "blue", high = "red",
-                       limit = c(-1,1), name="Correlation") +
-  theme(axis.title.x = element_blank(),
-        axis.title.y = element_blank(),
-        panel.background = element_blank())
+# Calculate the skewness of the scaled data
+skewness(SCFA.Data.Scaled)
+
+# Combine the scaled data with the first two columns from the original data
+SCFA.Data.Scaled <- as.data.frame(cbind(SCFA.Data[1:2], SCFA.Data.Scaled))
+
+# Convert the data from wide to long format using the gather() function
+SCFA.Data.Scaled.long <- gather(SCFA.Data.Scaled[3:13])
+
+# Create a boxplot of the scaled data using ggplot
+SCFA.Data.Scaled.boxplot <- ggplot(SCFA.Data.Scaled.long, aes(x = value, y = key, fill = key)) +
+  geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
+  labs(title = "Scaled SCFA Data Boxplot")
+
+# Print the boxplot
+print(SCFA.Data.Scaled.boxplot)
+
+```
+
+```{r}
+# Box plot of data distribution of each group (Mother, PI, TI)
+
+# Convert the data to long format using gather()
+SCFA.Data.Scaled %>%
+  gather(key = "feature", value = "value", -Sample, -Class) %>%
+
+  # Create a boxplot using ggplot
+  ggplot(aes(x = Class, y = value, fill = Class)) +
+  geom_boxplot() +
+
+  # Create separate plots for each feature using facet_wrap()
+  facet_wrap(~ feature, scales = "free") +
+
+  # Set the x-axis label as "Group" and y-axis label as "Value"
+  labs(x = "Group", y = "Value")
+
+```
+
+```{r}
+# Remove the features which as large no of outliers seen in above box plot 
+SCFA.Data.Scaled <- SCFA.Data.Scaled %>% 
+   select(-Isovaleric,-Valeric)
+```
+
+# EDA
+
+##### Principle component Analysis
 
 
-# Principle component Analysis
+```{r}
+# Perform PCA on the scaled data
+SCFA.Data.Scaled.pca <- prcomp(SCFA.Data.Scaled[3:11], scale = TRUE, center = TRUE)
 
-SCFA.PCA <- prcomp(SCFA.Data.Normalise.log[3:11], scale. = FALSE)
+# Visualization of PCA
 
-#Visualization of PCA
-fviz_pca_ind(SCFA.PCA,
+# Plot the individuals (samples) in the PCA space
+fviz_pca_ind(SCFA.Data.Scaled.pca,
              geom = "point",
-             habillage = SCFA.Data.Normalise.log$Class,
-             palette = c("black", "red", "green2"),
+             habillage = SCFA.Data.Scaled$Class,
+             palette = c("blue", "red", "green"),
              addEllipses = TRUE,
-             ellipse.type="confidence",,
+             ellipse.type = "confidence",
              ggtheme = theme_bw(),
-             title = "PCA plot for SCFA")
+             title = "PCA plot for SCFA biomarkers")
 
-#Scree plot 
-fviz_eig(SCFA.PCA, 
-         addlabels = TRUE, 
+# Scree plot to visualize the explained variance by each principal component
+fviz_eig(SCFA.Data.Scaled.pca,
+         addlabels = TRUE,
          ylim = c(0, 70),
-         main="Figure 5: Scree Plot")
+         main = "Scree Plot SCFA Data")
 
-fviz_pca_var(SCFA.PCA, col.var = "red")
+# Graph showing the contribution of variables to each principal component
+fviz_pca_var(SCFA.Data.Scaled.pca, col.var = "red")
 
 ```
 
-##Multivariate Analysis of variance (MANOVA)
+### correlation & Covariance
 
 ```{r}
-yvars <-as.matrix(SCFA.Data.Normalise.log %>%
-  select(-Sample,-Class))
-class<- factor(SCFA.Data.Normalise.log$Class) 
+# Calculate p-values for each correlation coefficient
+p.mat <- cor_pmat(SCFA.Data.Scaled[3:11], method = "pearson")
 
-MAOV.Model1 <- manova(yvars ~ class, data = SCFA.Data.Normalise.log)
-MAOV.Model1
-summary.aov(MAOV.Model1)
+# Calculate correlation matrix using Pearson correlation
+correlationMatrix <- cor(SCFA.Data.Scaled[3:11], method = "pearson")
+
+# Visualize the correlation matrix using ggcorrplot
+ggcorrplot(
+  correlationMatrix,
+  hc.order = TRUE,   # Hierarchical clustering for reordering variables
+  type = "lower",    # Show only the lower triangle of the correlation matrix
+  lab = TRUE,        # Show labels for variables
+  p.mat = p.mat      # Overlay p-values on the plot
+)
+
+```
+```{r}
+
+cov_df <- cov(SCFA.Data.Scaled[sapply(SCFA.Data.Scaled,is.numeric)], method = "pearson")
+
+cov_df <- cov2cor(cov_df)
+cov_df_long <- melt(cov_df)
+
+
+# Create the covariance plot using ggplot2
+plot <- ggplot(cov_df_long, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient(high = "red", low = "white") +
+  geom_text(aes(label = paste0(round(value * 100, 2))), color = "black", size = 3) +
+  labs(title = "Covariance Heatmap",
+       x = "Variable 1",
+       y = "Variable 2")
+
+
+print(plot)
+```
+
+### Statistical Test
+
+```{r}
+
+# Perform Shapiro-Wilk test for each numeric variable to check normalitty
+for (i in 3:ncol(SCFA.Data.Scaled)) {
+  result <- shapiro.test(SCFA.Data.Scaled[, i])
+  print(result)
+}
+
+SCFA.Data.Scaled$Class <- factor(SCFA.Data.Scaled$Class)
+
+# Define the Continuous Variables
+continuous.vars <- c("Propionic", "Isobutyric", "Butyric", "`2-Me-butyric`", "Caproic", "Heptanoic", "Valine", "Leucine", "Isoleucine")
+
+categorical.var <- "Class"
+
+# perform levene's test to see if all group has equal variance
+for (vars in continuous.vars) {
+  formula <- as.formula(paste(vars, "~", categorical.var))
+  var_test <- leveneTest(formula, data = SCFA.Data.Scaled)
+  cat("Variable:", vars, "\n")
+  print(var_test)
+  cat("\n")
+}
+
+# Perform Kruskal-Wallis test for each variable
+for (vars in continuous.vars) {
+  formula <- as.formula(paste(vars, "~", categorical.var))
+  kruskal_model <- kruskal.test(formula, data = SCFA.Data.Scaled)
+  cat("Variable:", vars, "\n")
+  print(kruskal_model)
+  cat("\n")
+}
+
+# Perform ANOVA and display summary for each model
+for (vars in continuous.vars) {
+  formula <- as.formula(paste(vars, "~", categorical.var))
+  aov_model <- aov(formula, data = SCFA.Data.Scaled)
+  tukey_test <- TukeyHSD(aov_model)
+  cat("Variable:", vars, "\n")
+  print(summary(aov_model))
+  print(tukey_test)
+  cat("\n")
+}
+
+```
+
+### Regression
+
+```{r}
+# Perform Regression for each continuous variable
+for (Vars in continuous.vars) {
+  formula <- as.formula(paste(Vars, "~", categorical.var))
+  LM.model <-lm(formula, data = SCFA.Data.Scaled)
+  cat("Variable:",Vars, "\n")
+  print(summary(LM.model))
+  cat("\n")
+}
+```
+
+## Feature selection
+
+```{r}
+set.seed(123)
+
+# Update the levels of the Class variable
+SCFA.Data.Scaled$Class <- factor(SCFA.Data.Scaled$Class, labels = c("Mother", "TI", "PI"))
+
+# Define the control for recursive feature elimination (RFE) using random forest
+control <- rfeControl(functions = rfFuncs, method = "cv", number = 10)
+
+# Run the RFE algorithm
+results <- rfe(SCFA.Data.Scaled[, 3:10], SCFA.Data.Scaled[, 2], sizes = c(1:8), rfeControl = control)
+
+# Summarize the results
+print(results)
+
+# List the chosen features selected by RFE
+predictors(results)
+
+
+library(Boruta)
+# Decide if a variable is important or not using Boruta
+boruta_output <- Boruta(Class ~ ., data=na.omit(SCFA.Data.Scaled), doTrace=2)  # perform Boruta search
+
+boruta_signif <- names(boruta_output$finalDecision[boruta_output$finalDecision %in% c("Confirmed", "Tentative")])  # collect Confirmed and Tentative variables
+
+plot(boruta_output, cex.axis=.7, las=2, xlab="", main="Variable Importance")  # plot variable
 ```

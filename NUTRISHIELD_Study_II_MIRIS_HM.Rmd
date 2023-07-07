@@ -6,7 +6,10 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(dev = "png",
+                      dpi = 300,
+                      echo = TRUE,
+                      cache = FALSE)
 ```
 
 ## Exploratory Data Analysis for NUTRISHIELD Study II MIRIS Human Milk Sample
@@ -17,20 +20,23 @@ knitr::opts_chunk$set(echo = TRUE)
 # install required library
 library(devtools)
 devtools::install_github("sfirke/janitor")
-
+#install.packages("DescTools")
+#install.packages("skimr")
 # load Required libraries
 library(tidyverse) # meta package of all tidyverse packages
 library(janitor) # 
 library(ggplot2)
 library(corrplot)
-library(metan)
+library(ggcorrplot)
 library(caret)
 library(FactoMineR)
 library(ggfortify)
 library(factoextra)
-library(scatterplot3d)
+library(moments)
 library(reshape2)
-
+library(ggbiplot)
+library(skimr)
+library(car)
 ```
 
 ## Data importing
@@ -49,7 +55,7 @@ MIRIS.HM.Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Pro
   row_to_names(1) %>%
   mutate_all(as.numeric)
    
-
+colnames(MIRIS.HM.Data)<- gsub("\\s*\\(.*?/100mL\\)", "", colnames(MIRIS.HM.Data))
 MIRIS.HM.Data <- rownames_to_column(MIRIS.HM.Data,var = "Samples")
 
 write.csv(MIRIS.HM.Data,"C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-clean-Data/NUTRISHIELD_Study_II_MIRIS_HM.csv")
@@ -58,77 +64,227 @@ write.csv(MIRIS.HM.Data,"C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Proje
 ```{r}
 str(MIRIS.HM.Data)
 
+skimmed_MIRIS <- skim_to_list(MIRIS.HM.Data)
+skimmed_MIRIS
 
-# Plot density plots for each column
-par(mfrow = c(3, 3))  # Set the layout to a 1x3 grid
-for (col in 2:ncol(MIRIS.HM.Data)) {
-  density_data <- density(MIRIS.HM.Data[, col])
-  plot(density_data, main = colnames(MIRIS.HM.Data)[col], xlab = "Values", ylab = "Density")
-}
-```
-
-```{r}
-summary(MIRIS.HM.Data)
+skewness(MIRIS.HM.Data[2:7])
 ```
 
 ## Data Prepossessing
 
-Normalization and scaling Of Data
+```{r warning=FALSE}
+# using caret lib to preprocess data
+standardization <- preProcess(MIRIS.HM.Data, method = c("BoxCox"),na.remove = TRUE )
 
-```{r}
-# Normalization of data using min-max Normalization method 
-# custom function to implement min max scaling
-MinMaxNormalization  <- function(x) {
-  (x - min(x)) / (max(x) - min(x))
-}
-#normalization of the data
-MIRIS.HM.Normalise <- as.data.frame(lapply(MIRIS.HM.Data[2:7], MinMaxNormalization))
-# Combined Class and Sample to normalize data
-MIRIS.HM.Normalise <- cbind(MIRIS.HM.Data$Samples, MIRIS.HM.Normalise)
-summary.data.frame(MIRIS.HM.Normalise)
+# standardize the preprocessed data
+MIRIS.HM.Data.scale <- predict(standardization,MIRIS.HM.Data)
 
+skewness(MIRIS.HM.Data.scale[2:7])
 
-par(mfrow = c(3, 3))  # Set the layout to a 1x3 grid
-for (col in 2:ncol(MIRIS.HM.Normalise)) {
-  density_data <- density(MIRIS.HM.Normalise[, col])
-  plot(density_data, main = colnames(MIRIS.HM.Normalise)[col], xlab = "Values", ylab = "Density")
-}
+skimmed_MIRIS_scale <- skim_to_list(MIRIS.HM.Data.scale)
+skimmed_MIRIS_scale
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+MIRIS.HM.Data.new <- MIRIS.HM.Data.scale %>% 
+  mutate(Class = case_when(grepl("^POST", Samples) ~ "post",
+    grepl("^PRE", Samples) ~ "pre",
+    grepl("^P", Samples) ~ "PI",
+    grepl("^T", Samples) ~ "TI",
+    TRUE ~ "other"
+  ))
+
+attach(MIRIS.HM.Data)
+
+# dived the  data sets according Milk groups  PI & T (OHM) and Pre and Post (DHM)
+MIRIS.HM.Data.OHM <-MIRIS.HM.Data.new[MIRIS.HM.Data.new$Class %in% c("TI","PI"),] 
+
+MIRIS.HM.Data.DHM <-MIRIS.HM.Data.new[MIRIS.HM.Data.new$Class %in% c("pre","post"),] 
 ```
 
 ##Exploratory Data Analysis
 
 ```{r}
+boxplot <- function(data){
+data %>%
+    gather(key = "feature", value = "value",-Class, -Samples) %>% 
+    ggplot(aes(x = Class, y = value, fill = Class)) +
+    geom_boxplot() +
+    facet_wrap(~ feature, scales = "free") +
+    labs(x = "Group", y = "Value")
+}
 
-#correlation of  variable 
-correlated.vars <- round(cor(MIRIS.HM.Normalise[2:7],method = "pearson"), 2)
-melted_correlation <- melt(correlated.vars)
+# OHM 
+MIRIS.OHM.Boxplot <-  boxplot(MIRIS.HM.Data.OHM)
+print(MIRIS.OHM.Boxplot)
 
-#create correlation heatmap
-ggplot(data = melted_correlation, aes(x=Var1, y=Var2, fill=value)) + 
+# DHM 
+MIRIS.DHM.Boxplot <-  boxplot(MIRIS.HM.Data.DHM)
+print(MIRIS.DHM.Boxplot)
+```
+
+## correlation 
+
+```{r}
+# Calculate p-values for each correlation coefficient
+p.mat <- cor_pmat(MIRIS.HM.Data.scale[2:7], method = "pearson")
+
+# Calculate correlation matrix using Pearson correlation
+correlationMatrix <- cor(MIRIS.HM.Data.scale[2:7], method = "pearson")
+
+# Visualize the correlation matrix using ggcorrplot
+ggcorrplot(
+  correlationMatrix,
+  hc.order = TRUE,   # Hierarchical clustering for reordering variables
+  type = "lower",    # Show only the lower triangle of the correlation matrix
+  lab = TRUE,        # Show labels for variables
+  p.mat = p.mat      # Overlay p-values on the plot
+)
+```
+### Covariance 
+
+```{r}
+# Calculate covariance matrix
+cov_matrix <- cov(MIRIS.HM.Data.scale[2:7], method = "pearson")
+
+cov_matrix <- cov2cor(cov_matrix)
+cov_df_long <- melt(cov_matrix)
+
+
+# Create the covariance plot using ggplot2
+plot <- ggplot(cov_df_long, aes(x = Var1, y = Var2, fill = value)) +
   geom_tile() +
-  geom_text(aes(Var2, Var1, label = value), size = 5) +
-  scale_fill_gradient2(low = "blue", high = "red",
-                       limit = c(-1,1), name="Correlation") +
-  theme(axis.title.x = element_blank(),
-        axis.title.y = element_blank(),
-        panel.background = element_blank())
+  scale_fill_gradient(high = "red", low = "white") +
+  geom_text(aes(label = paste0(round(value * 100, 2))), color = "black", size = 3) +
+  labs(title = "Covariance Heatmap",
+       x = "Variable 1",
+       y = "Variable 2")
 
 
+print(plot)
+```
 
-# PCA plot 
-MIRIS.HM.PCA <- prcomp(MIRIS.HM.Normalise[2:7], scale. = FALSE)
+# PCA 
+```{r}
+MIRIS.HM.PCA <- prcomp(MIRIS.HM.Data.new[2:7], scale = TRUE)
 
+#Visualization of PCA
+fviz_pca_ind(MIRIS.HM.PCA,
+             geom = "point",
+             habillage = MIRIS.HM.Data.new$Class,
+             palette = c("blue", "red","green","yellow"),
+             addEllipses = TRUE,
+             ellipse.type="confidence",
+             ggtheme = theme_bw(),
+             title = "PCA plot for HM Fatty Acids")
 #Scree plot 
 fviz_eig(MIRIS.HM.PCA, 
          addlabels = TRUE, 
          ylim = c(0, 70),
-         main="Scree Plot for MIRIS HUMAN MILK")
+         main="Scree Plot Fatty Acids")
 
+# Variable plot
 fviz_pca_var(MIRIS.HM.PCA, col.var = "red")
 
 
+```
 
-# ANOVA  Test 
+### stastical test to identfy is  significance difference between variables 
+```{r}
+# Define the Continuous Variables
+continuous.vars <- c("TS","Fat","Carbohydrates","`Crude Protein`", "Energy", "`True protein`")
 
+categorical.var <- "Class"
 
+MIRIS.HM.Data.new$Class <- factor(MIRIS.HM.Data.new$Class)
+# Perform Leven's test for each continuous variable
+for (vars in continuous.vars) {
+  formula <- as.formula(paste(vars, "~", categorical.var))
+  var_test <- leveneTest(formula, data = MIRIS.HM.Data.new)
+  cat("Variable:", vars, "\n")
+  print(var_test)
+  cat("\n")
+}
+
+# Perform ANOVA and display summary for each model
+for (vars in continuous.vars) {
+  formula <- as.formula(paste(vars, "~", categorical.var))
+  aov_model <- aov(formula, data = MIRIS.HM.Data.new)
+  tukey_test <- TukeyHSD(aov_model)
+  cat("Variable:", vars, "\n")
+  
+  print(summary(aov_model))
+  print(tukey_test)
+  cat("\n")
+}
+```
+
+### Feature selection 
+
+```{r}
+set.seed(100)
+options(warn=-1)
+
+ctrl <- rfeControl(functions = rfFuncs,
+                   method = "repeatedcv",
+                   repeats = 10,
+                   verbose = FALSE)
+
+lmProfile <- rfe(x=MIRIS.HM.Data.new[, 2:7], y=MIRIS.HM.Data.new$Class,
+                 sizes = c(1:8),
+                 rfeControl = ctrl)
+
+lmProfile
+```
+### Regression Model 
+
+```{r}
+# Split the data into training and test sets (80% training, 20% test)
+Train_Index <- createDataPartition(
+  y = MIRIS.HM.Data.scale$TS,
+  ## the outcome data are needed
+  p = .70,
+  ## The percentage of data in the
+  ## training set
+  list = FALSE
+)
+
+train_Data <- MIRIS.HM.Data[ Train_Index, -1]
+test_Data  <- MIRIS.HM.Data[-Train_Index, -1]
+```
+
+# linear regression model
+
+```{r}
+fitControl <- trainControl(method = "repeatedcv",   
+                           number = 10,     # number of folds
+                           repeats = 10)    # repeated ten times
+
+# Train the model using Linear Regression and predict on the training data itself.
+lm_model <-  train(TS ~ Carbohydrates+Energy+Fat, data=train_Data, method='lm', trControl = fitControl)
+
+# predict on test data
+lm_model_fitted <- predict(lm_model)
+lm_model
+```
+### SVM-radial
+
+```{r}
+# Train the model using Linear Regression and predict on the training data itself.
+Svm_model <-  train(TS ~ Carbohydrates+Energy+Fat, data=train_Data, method='svmRadial', trControl = fitControl)
+
+# predict on test data
+SVM_model_fitted <- predict(Svm_model)
+Svm_model
+```
+
+### KNN-Regression
+
+```{r}
+# Train the model using Linear Regression and predict on the training data itself.
+KNN_model <-  train(TS ~ Carbohydrates+Energy+Fat, data=train_Data, method='knn', trControl = fitControl)
+
+# predict on test data
+KNN_model_fitted <- predict(KNN_model)
+KNN_model
 ```

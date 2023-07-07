@@ -6,7 +6,10 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(dev = "png",
+                      dpi = 300,
+                      echo = TRUE,
+                      cache = TRUE)
 ```
 
 ## Exploratory Data Analysis for NUTRISHIELD Study II QTrap Targeted Urine Sample
@@ -16,20 +19,24 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r message=FALSE, warning=FALSE}
 # install required library
 library(devtools)
-devtools::install_github("sfirke/janitor")
+#devtools::install_github("sfirke/janitor")
 
 # load Required libraries
 library(tidyverse) # meta package of all tidyverse packages
 library(janitor)
 library(ggplot2)
-library(corrplot)
-library(metan)
 library(caret)
+library(ggcorrplot)
 library(FactoMineR)
 library(ggfortify)
 library(factoextra)
-library(scatterplot3d)
 library(reshape2)
+library(ggbiplot)
+library(stringr)
+library(corrplot)
+library(moments)
+library(skimr)
+library(car)
 ```
 
 ## Data importing
@@ -38,79 +45,160 @@ library(reshape2)
 # Set Working Directory
 setwd("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/R-script/EDA_for_Human_Mother_Milk")
 
-#load Data
-QTrap.Targeted.Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_QTrap_Targeted_Urine.csv",sep = ";", skip = 3)
-
-str(QTrap.Targeted.Data)
+# load Data set
+Targeted.biomarkers.data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_QTrap_Targeted_Urine.csv", sep = ";", skip = 3)
+str(Targeted.biomarkers.data)
 ```
 
-## Data Prepossessing
+## Data Cleaning 
 
 ```{r}
-# Data Cleaning 
-QTrap.Targeted.Data <- QTrap.Targeted.Data %>%
-  # Finding specific pattern to select the sample from data set
+# Data cleaning for Targeted Biomarkers Data
+
+# Select the columns containing "IU" or "MU" in their names
+Targeted.biomarkers.data <- Targeted.biomarkers.data %>%
   select(Sample, contains(c("IU", "MU"))) %>%
+
+  # Transpose the data to convert it from wide to long format
   t() %>%
   as.data.frame() %>%
+
+  # Set the first row as column names
   row_to_names(1) %>%
+  # Convert variables to double (numeric) except for the "Class" column
   mutate_if(names(.) != "Class", as.double) %>%
+  # Rename the rownames column as "Samples"
   rownames_to_column(var = "Samples")
 
-Qtrap.targeted.Data.long <- gather(QTrap.Targeted.Data[3:29])
-ggplot(Qtrap.targeted.Data.long, aes(x=value, fill=key)) +
-  geom_density(alpha =0.25)+
-  xlim(-1,20)+
-  ylim(0,2)
+# Remove the "(umol/g creat)" part from the column names using regex
+colnames(Targeted.biomarkers.data) <- gsub("\\s*\\(umol\\/g creat\\)", "", colnames(Targeted.biomarkers.data))
 
-# Save clean data
-write.csv(QTrap.Targeted.Data,"C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-clean-Data/NUTRISHIELD_Study_II_QTrap_Targeted.csv", row.names = FALSE)
+# Display the Summary statistic
+skimmed_target <-  skim_to_list(Targeted.biomarkers.data)
+skimmed_target
+
+# Save the clean data to a CSV file
+write.csv(Targeted.biomarkers.data, "C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-clean-Data/NUTRISHIELD_Study_II_QTrap_Targeted.csv", row.names = FALSE)
+
+```
+### Remove feature with constant value
+```{r}
+# Function to check if features has Constant value or very few unique values
+check.constant.or.few.unique <- function(data) {
+ result <- vector("character", length = ncol(data))
+ 
+ for (i in 1:ncol(data)) {
+   column <- data[[i]]
+   
+   if (length(unique(column)) == 1) {
+     result[i] <- "Constant value"
+   } else if (length(unique(column)) <= 50) {
+     result[i] <- "Few unique values"
+   } else {
+     result[i] <- "No pattern"
+   }
+ }
+ pattern_columns <- names(data)[result != "No pattern"]
+ return(pattern_columns)
+}
+results <- check.constant.or.few.unique(Targeted.biomarkers.data)
+print(results)
+```
+##### Remove the variable with constant value and few unique values 
+```{r}
+Targeted.biomarkers.data <- Targeted.biomarkers.data %>% 
+  select(-`3-IPA`,-Daidzein,-Equol,-Glycitein,-Genistein)
+```
+### Data Preprocessing 
+
+```{r}
+# Data Distribution
+# Gather columns 3 to 14 into a long format
+Targeted.biomarkers.data.long.A <- gather(Targeted.biomarkers.data[3:14])
+
+# Gather columns 15 to 24 into a long format
+Targeted.biomarkers.data.long.B <- gather(Targeted.biomarkers.data[15:24])
+
+# Generate a box plot for Targeted.biomarkers.data.long.A
+ggplot(Targeted.biomarkers.data.long.A, aes(x = value, y = key, fill = key)) +
+  geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
+  labs(title = "Data Distribution box plot before normalization")
+
+# Generate a box plot for Targeted.biomarkers.data.long.B
+ggplot(Targeted.biomarkers.data.long.B, aes(x = value, y = key, fill = key)) +
+  geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
+  labs(title = "Data Distribution box plot before normalization")
+
+# Calculate skewness for columns 3 to 24
+skewness(Targeted.biomarkers.data[3:24])
+
+```
+
+### Transfromation of the data using Log10 Tranformation 
+From the skewness you can see data is right skewed therefore using log10 transformation to reduce  skewness
+
+```{r warning=FALSE}
+# log 10 transformation
+# Perform log10 transformation on columns 3 to 24
+Targeted.biomarkers.data.Normal <- as.data.frame(log10(Targeted.biomarkers.data[3:24]))
+
+# Replace infinite values with 0
+for (col in names(Targeted.biomarkers.data.Normal)) {
+  Targeted.biomarkers.data.Normal[[col]][!is.finite(Targeted.biomarkers.data.Normal[[col]])] <- 0
+}
+
+# Combine the transformed data with the first two columns from the original data
+Targeted.biomarkers.data.Normal <- cbind(Targeted.biomarkers.data[1:2], Targeted.biomarkers.data.Normal)
+
+# Generate summary statistics for the transformed data
+skimmed_target_normal <- skim_to_list(Targeted.biomarkers.data.Normal)
+skimmed_target_normal
+
+# Calculate skewness after the transformation
+skewness(Targeted.biomarkers.data.Normal[3:24])
+
+# Box plot after the transformation
+Targeted.biomarkers.data.Normal.long.A <- gather(Targeted.biomarkers.data.Normal[3:14])
+Targeted.biomarkers.data.Normal.long.B <- gather(Targeted.biomarkers.data.Normal[15:24])
+
+# Generate a box plot for Targeted.biomarkers.data.Normal.long.A
+ggplot(Targeted.biomarkers.data.Normal.long.A, aes(x = value, y = key, fill = key)) +
+  geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
+  labs(title = "Data Distribution box plot before normalization") +
+  xlim(-1, 5)
+
+# Generate a box plot for Targeted.biomarkers.data.Normal.long.B
+ggplot(Targeted.biomarkers.data.Normal.long.B, aes(x = value, y = key, fill = key)) +
+  geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
+  labs(title = "Data Distribution box plot after normalization") +
+  xlim(-1, 5)
+
 ```
 
 ```{r}
-#Normalization and scaling Of Data
-QTrap.Targeted.Data.Normalise <- log10(QTrap.Targeted.Data[3:29])
-QTrap.Targeted.Data.Normalise[sapply(QTrap.Targeted.Data.Normalise, is.infinite)] <- 0
-summary(QTrap.Targeted.Data.Normalise)
-
-
-#Box plot
-Qtrap.targeted.Data1.Normalise.long <- gather(QTrap.Targeted.Data.Normalise[3:27])
-ggplot(Qtrap.targeted.Data1.Normalise.long, aes(x = value, y = key))+
-  geom_boxplot(outlier.colour = "red", outlier.shape = 1)
-
-
-# Remove the Feature which has Constance  or single throughout
-QTrap.Targeted.Data.Normalise <- QTrap.Targeted.Data.Normalise %>%
-  select(-`Quercetin (umol/g creat)`,-`Kaempferol (umol/g creat)`,-`Glycitein (umol/g creat)`,`Genistein (umol/g creat)`,-`Equol (umol/g creat)`, `Daidzein (umol/g creat)`) 
-
-QTrap.Targeted.Data.Normalise <- cbind(QTrap.Targeted.Data[1:2], QTrap.Targeted.Data.Normalise)
+# Box plot of data distribution of each group (Mother , PI , TI)
+Targeted.biomarkers.data.Normal %>%
+  gather(key = "feature", value = "value", -Samples, -Class) %>%
+  ggplot(aes(x = Class, y = value, fill = Class)) +
+  geom_boxplot() +
+  facet_wrap(~ feature, scales = "free") +
+  labs(x = "Group", y = "Value")
 ```
 
-##Exploratory Data Analysis
+```{r}
+# Removing the variable which has large  no of outliers  
+Targeted.biomarkers.data.Normal <- Targeted.biomarkers.data.Normal %>% 
+  select(-Quercetin, -Kaempferol, -`1-Methylhistidine`)
+```
 
 ```{r}
-#correlation of variable 
-corrrlation.SCFA <- round(cor(QTrap.Targeted.Data.Normalise[3:23]),2)
-melted_correlation <- melt(corrrlation.SCFA)
-
-#create correlation heat map
-ggplot(data = melted_correlation, aes(x=Var1, y=Var2, fill=value)) + 
-  geom_tile() +
-  geom_text(aes(Var2, Var1, label = value), size = 5) +
-  scale_fill_gradient2(low = "blue", high = "red",
-                       limit = c(-1,1), name="Correlation") +
-  theme(axis.title.x = element_blank(),
-        axis.title.y = element_blank(),
-        panel.background = element_blank())
-
 # Principle component Analysis
-QTrap.Targeted.Data.Normalise.pca <- prcomp(QTrap.Targeted.Data.Normalise[3:23], scale. = FALSE)
+Targeted.biomarkers.Data.Normalise.pca <- prcomp(Targeted.biomarkers.data.Normal[3:22], scale. = TRUE, center = TRUE)
 
 #Visualization of PCA
-fviz_pca_ind(QTrap.Targeted.Data.Normalise.pca,
+fviz_pca_ind(Targeted.biomarkers.Data.Normalise.pca,
              geom = "point",
-             habillage = QTrap.Targeted.Data.Normalise$Class,
+             habillage = Targeted.biomarkers.data.Normal$Class,
              palette = c("blue", "red","yellow"),
              addEllipses = TRUE,
              ellipse.type="confidence",
@@ -118,22 +206,147 @@ fviz_pca_ind(QTrap.Targeted.Data.Normalise.pca,
              title = "PCA plot for Qtrap targeted biomarkrs")
 
 #Scree plot 
-fviz_eig(QTrap.Targeted.Data.pca, 
+fviz_eig(Targeted.biomarkers.Data.Normalise.pca, 
          addlabels = TRUE, 
          ylim = c(0, 70),
-         main="Figure 5: Scree Plot Qtrap targeted")
+         main="Scree Plot Qtrap targeted Biomarkers")
 
 #Graph for variable
-fviz_pca_var(QTrap.Targeted.Data.pca, col.var = "red")
+fviz_pca_var(Targeted.biomarkers.Data.Normalise.pca, col.var = "red")
+ 
+# biplot
+biplot = ggbiplot(pcobj = Targeted.biomarkers.Data.Normalise.pca,
+                  choices = c(1,2),
+                  scale = 0,
+                  varname.size = 2.5,
+                  varname.abbrev = FALSE,  # Abbreviate variable names (TR
+                  var.axes = TRUE,      # Remove variable vectors (TRUE)
+                  circle = FALSE,        # Add unit variance circle (TRUE
+                  ellipse = FALSE, groups = Targeted.biomarkers.data.Normal$Class) # Adding ellipses
+print(biplot)
 ```
-##Multivariate Analysis of variance (MANOVA)
-
+## Correlation & Covariance
 ```{r}
-yvars <-as.matrix(QTrap.Targeted.Data.Normalise %>%
-  select(-Samples,-Class))
-class<- factor(QTrap.Targeted.Data.Normalise$Class) 
+# Calculate p-values for each correlation coefficient
+p.mat <- cor_pmat(Targeted.biomarkers.data.Normal[3:22], method = "pearson")
 
-MAOV.Model2 <- manova(yvars ~ class, data = QTrap.Targeted.Data.Normalise)
-MAOV.Model2
-summary.aov(MAOV.Model2)
+# Calculate correlation matrix using Pearson correlation
+correlationMatrix <- cor(Targeted.biomarkers.data.Normal[3:22], method = "pearson")
+
+# Visualize the correlation matrix using ggcorrplot
+ggcorrplot(
+  correlationMatrix,
+  hc.order = TRUE,   # Hierarchical clustering for reordering variables
+  type = "lower",    # Show only the lower triangle of the correlation matrix
+  lab = FALSE,        # Show labels for variables
+  p.mat = p.mat      # Overlay p-values on the plot
+)
+
+# Calculate the covariance matrix using Pearson correlation
+cov_df <- cov(Targeted.biomarkers.data.Normal[sapply(Targeted.biomarkers.data.Normal, is.numeric)], method = "pearson")
+
+# Convert covariance matrix to correlation matrix
+cov_df <- cov2cor(cov_df)
+
+# Reshape the correlation matrix to long format
+cov_df_long <- melt(cov_df)
+
+# Create the covariance plot using ggplot2
+plot <- ggplot(cov_df_long, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient(high = "red", low = "white") +
+  geom_text(aes(label = paste0(round(value * 100, 2))), color = "black", size = 3) +
+  labs(title = "Covariance Heatmap",
+       x = "Variable 1",
+       y = "Variable 2")
+
+# Print the covariance plot
+print(plot)
+
+```
+### Test of Homogeneity of Variance And ANOVA
+```{r}
+
+# Perform Shapiro-Wilk test for each numeric variable to check normality
+for (i in 3:ncol(Targeted.biomarkers.data.Normal)) {
+  variable_name <- names(Targeted.biomarkers.data.Normal)[i]
+  result <- shapiro.test(Targeted.biomarkers.data.Normal[, i])
+  cat("Variable:", variable_name, "\n")
+  print(result)
+  cat("\n")
+}
+
+
+# Define the Continuous Variables
+continuous.vars <- c("Phenylpropionylglycine", "Taurine", "Citrulline", "Galactitol", "Isovalerylglycine", "Isobutyrylglycine", "TMAO", "Anserine", "`3-Methylhistidine`", "`L-Kynurenine`", "`L-Tyrosine`", "`O-DMA`", "Phloretin", "Hesperetin", "`Proline betaine`", "`Ferullic Acid Sulfate`", "`Hippuric Acid`", "`3-IAA`")
+
+categorical.var <- "Class"
+Targeted.biomarkers.data.Normal$Class <- factor(Targeted.biomarkers.data.Normal$Class)
+
+# Perform Levene's test to see if all groups have equal variance
+for (vars in continuous.vars) {
+  formula <- as.formula(paste(vars, "~", categorical.var))
+  var_test <- leveneTest(formula, data = Targeted.biomarkers.data.Normal)
+  cat("Variable:", vars, "\n")
+  print(var_test)
+  cat("\n")
+}
+
+# Perform Kruskal-Wallis test for each variable
+for (vars in continuous.vars) {
+  formula <- as.formula(paste(vars, "~", categorical.var))
+  kruskal_model <- kruskal.test(formula, data = Targeted.biomarkers.data.Normal)
+  cat("Variable:", vars, "\n")
+  print(kruskal_model)
+  cat("\n")
+}
+
+# Perform ANOVA and display summary for each model
+for (vars in continuous.vars) {
+  formula <- as.formula(paste(vars, "~", categorical.var))
+  aov_model <- aov(formula, data = Targeted.biomarkers.data.Normal)
+  tukey_test <- TukeyHSD(aov_model)
+  cat("Variable:", vars, "\n")
+  print(summary(aov_model))
+  print(tukey_test)
+  cat("\n")
+}
+
+```
+
+### Regression Test
+```{r}
+# perform regression 
+for (Vars in continuous.vars) {
+  formula <- as.formula(paste(Vars, "~", categorical.var))
+  Lm.model <-lm(formula, data = Targeted.biomarkers.data.Normal)
+  cat("Variable:",Vars, "\n")
+  print(summary(Lm.model))
+  cat("\n")
+}
+```
+
+
+## Feature selection
+#### Feature Selection Using Recursive feature elimination Method
+```{r}
+Targeted.biomarkers.data.Normal$Class <- factor(Targeted.biomarkers.data.Normal$Class, labels = c("Mother","TI","PI"))
+# define the control using a random forest selection function
+control <- rfeControl(functions=rfFuncs, method="cv", number=10)
+# run the RFE algorithm
+results <- rfe(Targeted.biomarkers.data.Normal[,3:22], Targeted.biomarkers.data.Normal[,2], sizes=c(1:22), rfeControl=control)
+# summarize the results
+print(results)
+# list the chosen features
+predictors(results)
+
+
+library(Boruta)
+# Decide if a variable is important or not using Boruta
+boruta_output <- Boruta(Class ~ ., data=na.omit(Targeted.biomarkers.data.Normal), doTrace=2)  # perform Boruta search
+
+boruta_signif <- names(boruta_output$finalDecision[boruta_output$finalDecision %in% c("Confirmed", "Tentative")])  # collect Confirmed and Tentative variables
+
+# plot variable
+plot(boruta_output, cex.axis=.7, las=2, xlab="", main="Variable Importance")  
 ```
