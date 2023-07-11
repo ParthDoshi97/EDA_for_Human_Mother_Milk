@@ -46,46 +46,59 @@ library(car)
 setwd("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/R-script/EDA_for_Human_Mother_Milk")
 
 #load Data
-MIRIS.HM.Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_MIRIS_HM.csv",sep = ",", skip = 2)%>%
+MIRIS.HM.Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_MIRIS_HM.csv",sep = ",", skip = 2)
+str(MIRIS.HM.Data)
+
+
+MIRIS.HM.Data <-  MIRIS.HM.Data %>%
   # Finding specific pattern to select the sample from data set
-  select(-String, -contains(c("NUTRISHIELD","X0","Muestra"))) %>%
+  select(-c(1:7,9:12)) %>%
   select_if(~ !any(is.na(.))) %>%
   t() %>%
   as.data.frame() %>%
   row_to_names(1) %>%
   mutate_all(as.numeric)
-   
-colnames(MIRIS.HM.Data)<- gsub("\\s*\\(.*?/100mL\\)", "", colnames(MIRIS.HM.Data))
+ 
+     
 MIRIS.HM.Data <- rownames_to_column(MIRIS.HM.Data,var = "Samples")
+
+# assigning new names to the columns of the data frame
+colnames(MIRIS.HM.Data) <- c("Samples","Fat","Crude_Protein","Carbohydates","TS","Energy","True_Protein")
 
 write.csv(MIRIS.HM.Data,"C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-clean-Data/NUTRISHIELD_Study_II_MIRIS_HM.csv")
 ```
 
 ```{r}
-str(MIRIS.HM.Data)
-
-skimmed_MIRIS <- skim_to_list(MIRIS.HM.Data)
+skimmed_MIRIS <- skim(MIRIS.HM.Data)
 skimmed_MIRIS
 
+# check for Skewness
+print("skewness Score")
 skewness(MIRIS.HM.Data[2:7])
 ```
 
 ## Data Prepossessing
 
 ```{r warning=FALSE}
+
 # using caret lib to preprocess data
-standardization <- preProcess(MIRIS.HM.Data, method = c("BoxCox"),na.remove = TRUE )
+Normalization <- preProcess(MIRIS.HM.Data, method = c("BoxCox"),na.remove = TRUE )
 
 # standardize the preprocessed data
-MIRIS.HM.Data.scale <- predict(standardization,MIRIS.HM.Data)
+MIRIS.HM.Data.scale <- predict(Normalization,MIRIS.HM.Data)
 
+# Skewness Score After Normalization
 skewness(MIRIS.HM.Data.scale[2:7])
 
+# Summary Stats after Normalization
 skimmed_MIRIS_scale <- skim_to_list(MIRIS.HM.Data.scale)
 skimmed_MIRIS_scale
 ```
+## Comparative anaylsis 
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Assigning Class to Variable  according to information from sample ID
+
 MIRIS.HM.Data.new <- MIRIS.HM.Data.scale %>% 
   mutate(Class = case_when(grepl("^POST", Samples) ~ "post",
     grepl("^PRE", Samples) ~ "pre",
@@ -96,15 +109,7 @@ MIRIS.HM.Data.new <- MIRIS.HM.Data.scale %>%
 
 attach(MIRIS.HM.Data)
 
-# dived the  data sets according Milk groups  PI & T (OHM) and Pre and Post (DHM)
-MIRIS.HM.Data.OHM <-MIRIS.HM.Data.new[MIRIS.HM.Data.new$Class %in% c("TI","PI"),] 
-
-MIRIS.HM.Data.DHM <-MIRIS.HM.Data.new[MIRIS.HM.Data.new$Class %in% c("pre","post"),] 
-```
-
-##Exploratory Data Analysis
-
-```{r}
+# Boxplot Function 
 boxplot <- function(data){
 data %>%
     gather(key = "feature", value = "value",-Class, -Samples) %>% 
@@ -114,14 +119,11 @@ data %>%
     labs(x = "Group", y = "Value")
 }
 
-# OHM 
-MIRIS.OHM.Boxplot <-  boxplot(MIRIS.HM.Data.OHM)
-print(MIRIS.OHM.Boxplot)
-
-# DHM 
-MIRIS.DHM.Boxplot <-  boxplot(MIRIS.HM.Data.DHM)
-print(MIRIS.DHM.Boxplot)
+Milk.Boxplot <- boxplot(MIRIS.HM.Data.new)
+print(Milk.Boxplot)
 ```
+
+##Exploratory Data Analysis
 
 ## correlation 
 
@@ -190,29 +192,39 @@ fviz_pca_var(MIRIS.HM.PCA, col.var = "red")
 ```
 
 ### stastical test to identfy is  significance difference between variables 
+
 ```{r}
-# Define the Continuous Variables
-continuous.vars <- c("TS","Fat","Carbohydrates","`Crude Protein`", "Energy", "`True protein`")
 
-categorical.var <- "Class"
+MIRIS.HM.Data.new$Class <-  factor(MIRIS.HM.Data.new$Class)
 
-MIRIS.HM.Data.new$Class <- factor(MIRIS.HM.Data.new$Class)
 # Perform Leven's test for each continuous variable
-for (vars in continuous.vars) {
-  formula <- as.formula(paste(vars, "~", categorical.var))
+for (i in 2:7) {
+  # Create the formula
+  formula <- as.formula(paste(names(MIRIS.HM.Data.new)[i], "~ Class"))
+  
+  # Perform Levene's test
   var_test <- leveneTest(formula, data = MIRIS.HM.Data.new)
-  cat("Variable:", vars, "\n")
+  
+  # Print the variable name and the test results
+  cat("Variable:", names(MIRIS.HM.Data.new)[i], "\n")
   print(var_test)
   cat("\n")
 }
 
+
+
 # Perform ANOVA and display summary for each model
-for (vars in continuous.vars) {
-  formula <- as.formula(paste(vars, "~", categorical.var))
+for (i in 2:7) {
+  # Create the formula
+  formula <- as.formula(paste(names(MIRIS.HM.Data.new)[i], "~ Class"))
+  # Perform Anova
   aov_model <- aov(formula, data = MIRIS.HM.Data.new)
+  # Perform Tukey Test
   tukey_test <- TukeyHSD(aov_model)
-  cat("Variable:", vars, "\n")
   
+  
+  # Print Results
+  cat("Variable:", names(MIRIS.HM.Data.new)[i], "\n")
   print(summary(aov_model))
   print(tukey_test)
   cat("\n")
@@ -223,18 +235,17 @@ for (vars in continuous.vars) {
 
 ```{r}
 set.seed(100)
-options(warn=-1)
 
 ctrl <- rfeControl(functions = rfFuncs,
                    method = "repeatedcv",
                    repeats = 10,
                    verbose = FALSE)
 
-lmProfile <- rfe(x=MIRIS.HM.Data.new[, 2:7], y=MIRIS.HM.Data.new$Class,
+rfe_Profile <- rfe(x=MIRIS.HM.Data.new[, 2:7], y=MIRIS.HM.Data.new$Class,
                  sizes = c(1:8),
                  rfeControl = ctrl)
 
-lmProfile
+rfe_Profile
 ```
 ### Regression Model 
 
@@ -261,30 +272,53 @@ fitControl <- trainControl(method = "repeatedcv",
                            repeats = 10)    # repeated ten times
 
 # Train the model using Linear Regression and predict on the training data itself.
-lm_model <-  train(TS ~ Carbohydrates+Energy+Fat, data=train_Data, method='lm', trControl = fitControl)
+lm_model <-  train(TS ~ ., data=train_Data, method='lm', trControl = fitControl)
 
 # predict on test data
-lm_model_fitted <- predict(lm_model)
+lm_model_fitted <- predict(lm_model, test_Data)
 lm_model
 ```
 ### SVM-radial
 
 ```{r}
-# Train the model using Linear Regression and predict on the training data itself.
-Svm_model <-  train(TS ~ Carbohydrates+Energy+Fat, data=train_Data, method='svmRadial', trControl = fitControl)
+# Train the model using Linear SVM and predict on the Test data.
+Svm_model <-  train(TS ~ ., data=train_Data, method='svmRadial', trControl = fitControl)
 
 # predict on test data
-SVM_model_fitted <- predict(Svm_model)
+SVM_model_fitted <- predict(Svm_model, test_Data)
 Svm_model
 ```
 
 ### KNN-Regression
 
 ```{r}
-# Train the model using Linear Regression and predict on the training data itself.
-KNN_model <-  train(TS ~ Carbohydrates+Energy+Fat, data=train_Data, method='knn', trControl = fitControl)
+# Train the model using Knn and predict on the test data.
+KNN_model <-  train(TS ~ ., data=train_Data, method='knn', trControl = fitControl)
 
 # predict on test data
-KNN_model_fitted <- predict(KNN_model)
+KNN_model_fitted <- predict(KNN_model, test_Data)
 KNN_model
+```
+
+### PLS
+```{r}
+# Train the model using PLS and predict on the Test data.
+PLS_model <-  train(TS ~ ., data=train_Data, method='pls', trControl = fitControl, tuneGrid = expand.grid(ncomp = 2))
+
+# predict on train model
+PLS_model_fitted <- predict(PLS_model,test_Data)
+
+PLS_model
+```
+
+### Random Forest
+
+```{r}
+# Train the model using PLS and predict on the Test data.
+RF_model <-  train(TS ~ ., data=train_Data, method='rf', trControl = fitControl)
+
+# predict on train model
+RF_model_fitted <- predict(RF_model,test_Data)
+
+RF_model
 ```

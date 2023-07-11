@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(dev = "png",
                       dpi = 300,
                       echo = TRUE,
-                      cache = TRUE)
+                      cache = FALSE)
 ```
 
 ## Exploratory Data Analysis for NUTRISHIELD Study II FAMES Human Milk Sample
@@ -37,16 +37,20 @@ library(Boruta)
 library(moments)
 library(skimr)
 library(car)
+```
 
+```{r}
 # Set Working Directory
 setwd("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/R-script/EDA_for_Human_Mother_Milk")
 ```
 
 ## Data importing & Cleaning 
-
 ```{r}
 # Load the FAMES.HM.Data from the CSV file
-FAMES.HM.Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_FAMES_HM.csv", sep = ";", skip = 3) %>%
+FAMES.HM.Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_FAMES_HM.csv", sep = ";", skip = 3) 
+str(FAMES.HM.Data)
+
+FAMES.HM.Data <- FAMES.HM.Data %>%
   # Select relevant columns by excluding "String" and columns containing "NUTRISHIELD" or "X0"
   select(-String, -contains(c("NUTRISHIELD", "X0"))) %>%
   # Remove columns with any missing values
@@ -69,7 +73,7 @@ colnames(FAMES.HM.Data) <- trimws(colnames(FAMES.HM.Data))
 FAMES.HM.Data <- rownames_to_column(FAMES.HM.Data, var = "Samples")
 
 # summary Stats
-skimmed_FAMES <- skim_to_wide(FAMES.HM.Data)
+skimmed_FAMES <- skim(FAMES.HM.Data)
 skimmed_FAMES
 
 # Save the clean data to a new CSV file
@@ -113,20 +117,18 @@ skewness(FAMES.HM.Data[3:31])
 ## Normalization of Data
 
 ```{r}
-# Log Transformation 
-FAMES.HM.Data.Normal <- log10(FAMES.HM.Data[3:31])
+# Normalization of  data
+Preprocess <- preProcess(FAMES.HM.Data, method = "BoxCox")
+# standardize the preprocessed data
+FAMES.HM.Data.Normal <- predict(Preprocess,FAMES.HM.Data)
 
-# Convert infinite values to 0
-for (col in names(FAMES.HM.Data.Normal)) {
-  FAMES.HM.Data.Normal[[col]][!is.finite(FAMES.HM.Data.Normal[[col]])] <- 0
-}
+skewness(FAMES.HM.Data.Normal[3:31])
 
-skimmed_FAMES.normal <- skim_to_wide(FAMES.HM.Data.Normal)
+
+skimmed_FAMES.normal <- skim(FAMES.HM.Data.Normal)
 skimmed_FAMES.normal
 
-# check Skewness
-skewness(FAMES.HM.Data.Normal)
-FAMES.HM.Data.Normal <- cbind(FAMES.HM.Data[1:2], FAMES.HM.Data.Normal)
+
 
 # Converting it into long 
 FAMES.HM.Data.Normal.long <- gather(FAMES.HM.Data.Normal[3:15])
