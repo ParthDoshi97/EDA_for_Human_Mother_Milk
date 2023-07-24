@@ -84,8 +84,15 @@ skewness(MIRIS.HM.Data[2:7])
 # using caret lib to preprocess data
 Normalization <- preProcess(MIRIS.HM.Data, method = c("BoxCox"),na.remove = TRUE )
 
-# standardize the preprocessed data
-MIRIS.HM.Data.scale <- predict(Normalization,MIRIS.HM.Data)
+# Normalization the preprocessed data
+MIRIS.HM.Data.normal <- predict(Normalization,MIRIS.HM.Data)
+
+# using caret lib to preprocess data
+standardise <- preProcess(MIRIS.HM.Data.normal, method = c("center","scale"),na.remove = TRUE )
+
+# Normalization the preprocessed data
+MIRIS.HM.Data.scale <- predict(Normalization,MIRIS.HM.Data.normal)
+MIRIS.HM.Data.scale[is.na(MIRIS.HM.Data.scale)] <- 0
 
 # Skewness Score After Normalization
 skewness(MIRIS.HM.Data.scale[2:7])
@@ -168,7 +175,7 @@ print(plot)
 
 # PCA 
 ```{r}
-MIRIS.HM.PCA <- prcomp(MIRIS.HM.Data.new[2:7], scale = TRUE)
+MIRIS.HM.PCA <- princomp(MIRIS.HM.Data.new[2:7])
 
 #Visualization of PCA
 fviz_pca_ind(MIRIS.HM.PCA,
@@ -187,16 +194,27 @@ fviz_eig(MIRIS.HM.PCA,
 
 # Variable plot
 fviz_pca_var(MIRIS.HM.PCA, col.var = "red")
+# Contribution of each Variable
+var <- get_pca_var(MIRIS.HM.PCA)
+PC1<-fviz_contrib(MIRIS.HM.PCA, "var", axes=1, xtickslab.rt=90)
+PC2<-fviz_contrib(MIRIS.HM.PCA, "var", axes=2, xtickslab.rt=90)
+PC3<-fviz_contrib(MIRIS.HM.PCA, "var", axes=3, xtickslab.rt=90)
+PC4<-fviz_contrib(MIRIS.HM.PCA, "var", axes=4, xtickslab.rt=90)
+PC5<-fviz_contrib(MIRIS.HM.PCA, "var", axes=5, xtickslab.rt=90)
 
-
+plot(PC1,main = "Variables percentage contribution of first Principal Components")
+plot(PC2,main = "Variables percentage contribution of Second Principal Components")
+plot(PC3,main = "Variables percentage contribution of Third Principal Components")
+plot(PC4,main = "Variables percentage contribution of Fourth Principal Components")
+plot(PC5,main = "Variables percentage contribution of Fifth Principal Components")
 ```
 
 ### stastical test to identfy is  significance difference between variables 
 
 ```{r}
+library(rstatix)
 
 MIRIS.HM.Data.new$Class <-  factor(MIRIS.HM.Data.new$Class)
-
 # Perform Leven's test for each continuous variable
 for (i in 2:7) {
   # Create the formula
@@ -211,24 +229,56 @@ for (i in 2:7) {
   cat("\n")
 }
 
-
-
-# Perform ANOVA and display summary for each model
-for (i in 2:7) {
-  # Create the formula
+# Perform Kruskal-Wallis test for each variable
+ for (i in 2:7){
+ 
   formula <- as.formula(paste(names(MIRIS.HM.Data.new)[i], "~ Class"))
-  # Perform Anova
-  aov_model <- aov(formula, data = MIRIS.HM.Data.new)
-  # Perform Tukey Test
-  tukey_test <- TukeyHSD(aov_model)
-  
-  
-  # Print Results
+  kruskal_model <- kruskal.test(formula, data = MIRIS.HM.Data.new)
+ # Print the variable name and the test results
   cat("Variable:", names(MIRIS.HM.Data.new)[i], "\n")
-  print(summary(aov_model))
-  print(tukey_test)
+  print(kruskal_model)
   cat("\n")
 }
+
+# Perform pairwise dunn test and display summary for each model
+for (i in 2:7){
+ 
+  formula <- as.formula(paste(names(MIRIS.HM.Data.new)[i], "~ Class"))
+  pairwise_test <- dunn_test(formula, data = MIRIS.HM.Data.new, p.adjust.method = "bonferroni")
+# Print the variable name and the test results
+  cat("Variable:", names(MIRIS.HM.Data.new)[i], "\n")
+  print(pairwise_test)
+  cat("\n")
+}
+```
+```{r message=FALSE, warning=FALSE}
+library(ggstatsplot)
+library(rlang)
+
+StatBoxplot <- function(y) {
+  y_sym <- sym(y)
+  plot <- ggbetweenstats(
+    data = MIRIS.HM.Data.new,
+    x = Class,
+    y = !!y_sym,
+    type = "nonparametric",
+    plot.type = "box",
+    pairwise.comparisons = TRUE,
+    pairwise.display = "all",
+    centrality.plotting = FALSE,
+    bf.message = FALSE,
+    ylab = y
+  )
+  
+  return(plot)
+}
+
+StatBoxplot(y = "Fat")
+StatBoxplot(y = "TS")
+StatBoxplot(y = "Energy")
+StatBoxplot(y = "Crude_Protein")
+StatBoxplot(y = "Carbohydates")
+StatBoxplot(y = "True_Protein")
 ```
 
 ### Feature selection 

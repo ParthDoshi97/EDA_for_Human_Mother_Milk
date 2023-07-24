@@ -98,53 +98,66 @@ skewness(Qtrap.filterd.data[3:54])
 ```
 
 ```{r}
-#Normalization and scaling Of Data
-QTrap.Semiquant.Data.normalise <- log10(Qtrap.filterd.data[3:54])
+#scaling Of Data
+# using caret lib to preprocess data
+#Normalization <- preProcess(Qtrap.filterd.data, method = "BoxCox",na.remove = TRUE )
+
+# standardize the preprocessed data
+#Qtrap.filterd.data.normal <- predict(Normalization,Qtrap.filterd.data)
+
+#scaling Of Data
+# using caret lib to preprocess data
+AutoScaling <- preProcess(Qtrap.filterd.data, method = c("scale","center"),na.remove = TRUE )
+
+# standardize the preprocessed data
+Qtrap.filterd.data.scaled <- predict(AutoScaling,Qtrap.filterd.data)
+
+
 # Replacing the value Infinite value  with 0 
-for (col in names(QTrap.Semiquant.Data.normalise)) {
-  QTrap.Semiquant.Data.normalise[[col]][!is.finite(QTrap.Semiquant.Data.normalise[[col]])] <- 0
-}
-QTrap.Semiquant.Data.normalise <- cbind(QTrap.Semiquant.Data[1:2],QTrap.Semiquant.Data.normalise)
+#for (col in names(Qtrap.filterd.data.scaled)) {
+#  Qtrap.filterd.data.scaled[[col]][!is.finite(Qtrap.filterd.data.scaled[[col]])] <- 0
+#}
+#Qtrap.filterd.data.scaled <- cbind(QTrap.Semiquant.Data[1:2],Qtrap.filterd.data.scaled)
 
 # Calculate the skewness of the scaled data
-skewness(QTrap.Semiquant.Data.normalise[3:54])
+skewness(Qtrap.filterd.data.scaled[3:54])
 
 # Summary statistics
-skimmed_normal <-skim_to_wide(QTrap.Semiquant.Data.normalise)
+skimmed_normal <-skim(Qtrap.filterd.data.scaled)
 skimmed_normal
 ```
 
 ### Visualization of Data 
 
 ```{r}
-QTrap.Semiquant.Data.normalise.longA <- gather(QTrap.Semiquant.Data.normalise[3:25])
-QTrap.Semiquant.Data.normalise.longB <- gather(QTrap.Semiquant.Data.normalise[26:54])
+Qtrap.filterd.data.scaled.longA <- gather(Qtrap.filterd.data.scaled[3:25])
+Qtrap.filterd.data.scaled.longB <- gather(Qtrap.filterd.data.scaled[26:54])
 
 # box plot after distribution for Subset 
-QTrap.Semiquant.Data.normalise.boxplotA <- ggplot(QTrap.Semiquant.Data.normalise.longA, aes(x = value, y = key, fill = key))+
+Qtrap.filterd.data.scaled.boxplotA <- ggplot(Qtrap.filterd.data.scaled.longA, aes(x = value, y = key, fill = key))+
   geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
   labs(title = "Qtrap filtered data Boxplot",)
-print(QTrap.Semiquant.Data.normalise.boxplotA)
+print(Qtrap.filterd.data.scaled.boxplotA)
 
 # box plot after distribution for Subset 
-QTrap.Semiquant.Data.normalise.boxplotB <- ggplot(QTrap.Semiquant.Data.normalise.longB, aes(x = value, y = key, fill = key))+
+Qtrap.filterd.data.scaled.boxplotB <- ggplot(Qtrap.filterd.data.scaled.longB, aes(x = value, y = key, fill = key))+
   geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
   labs(title = "Qtrap filtered data Boxplot",)
-print(QTrap.Semiquant.Data.normalise.boxplotB)
+print(Qtrap.filterd.data.scaled.boxplotB)
 
 
 ```
 
 ```{r}
 
-QTrap.Semiquant.Data.normalise.subset.A <- QTrap.Semiquant.Data.normalise %>% 
+Qtrap.filterd.data.scaled.subset.A <- Qtrap.filterd.data.scaled %>% 
   select(-c(26:54))
 
-QTrap.Semiquant.Data.normalise.subset.B <- QTrap.Semiquant.Data.normalise %>% 
+Qtrap.filterd.data.scaled.subset.B <- Qtrap.filterd.data.scaled %>% 
   select(-c(3:25))
 
 # Box plot of data distribution of each group (Mother , PI , TI)
-QTrap.Semiquant.Data.normalise.subset.A %>%
+Qtrap.filterd.data.scaled.subset.A %>%
   gather(key = "feature", value = "value", -Samples, -Class) %>%
   ggplot(aes(x = Class, y = value, fill = Class)) +
   geom_boxplot() +
@@ -152,7 +165,7 @@ QTrap.Semiquant.Data.normalise.subset.A %>%
   labs(x = "Group", y = "Value")
 
 
-QTrap.Semiquant.Data.normalise.subset.B %>%
+Qtrap.filterd.data.scaled.subset.B %>%
   gather(key = "feature", value = "value", -Samples, -Class) %>%
   ggplot(aes(x = Class, y = value, fill = Class)) +
   geom_boxplot() +
@@ -164,12 +177,12 @@ QTrap.Semiquant.Data.normalise.subset.B %>%
 
 ```{r echo=FALSE}
 # Principle component Analysis
-QTrap.Semiquant.Data.pca <- prcomp(QTrap.Semiquant.Data.normalise[3:54], scale. = TRUE, center = TRUE)
+QTrap.Semiquant.Data.pca <- prcomp(Qtrap.filterd.data.scaled[3:54], scale. = TRUE, center = TRUE)
 
 #Visualization of PCA
 fviz_pca_ind(QTrap.Semiquant.Data.pca,
              geom = "point",
-             habillage = QTrap.Semiquant.Data.normalise$Class,
+             habillage = Qtrap.filterd.data.scaled$Class,
              palette = c( "red", "green2","blue"),
              addEllipses = TRUE,
              ellipse_type = "confidence",
@@ -190,26 +203,26 @@ fviz_pca_var(QTrap.Semiquant.Data.pca, col.var = "red")
 
 ```{r echo=FALSE}
 # Calculate p-values for each correlation coefficient
-#p.mat <- cor_pmat(QTrap.Semiquant.Data.normalise[3:38], method = "pearson")
+p.mat <- cor_pmat(Qtrap.filterd.data.scaled[3:54], method = "pearson")
 # calculate correlation matrix
-correlationMatrix <- cor(QTrap.Semiquant.Data.normalise[3:54])
+correlationMatrix <- cor(Qtrap.filterd.data.scaled[3:54])
 # summarize the correlation matrix
 #print(correlationMatrix)
-corrplot(correlationMatrix, method = "color")
+ggcorrplot(
+  correlationMatrix,
+  hc.order = TRUE,   # Hierarchical clustering for reordering variables
+  type = "lower",    # Show only the lower triangle of the correlation matrix
+  lab = FALSE        # Show labels for variables   
+)
 ```
 
 ### Statistical Test
 
 ```{r echo=TRUE}
-
-# Perform Shapiro-Wilk test for each numeric variable to check normalitty
-for (i in 3:ncol(QTrap.Semiquant.Data.normalise)) {
-  result <- shapiro.test(QTrap.Semiquant.Data.normalise[, i])
-  print(result)
-}
+library(rstatix)
 
 # Factor the  class 
-QTrap.Semiquant.Data.normalise$Class <- factor(QTrap.Semiquant.Data.normalise$Class)
+Qtrap.filterd.data.scaled$Class <- factor(Qtrap.filterd.data.scaled$Class)
 
 # define the  Contentious Variables
 continuous.vars <- c("`EC-G`", "`1,7-DMU`", "`1-MeHis`", "`1-MU`", "`1-MX`", "`2-Aph`", "`2-FG`",
@@ -225,7 +238,7 @@ categorial.var <- "Class"
 # Perform levene's test
 for (Vars in continuous.vars) {
   formula <- as.formula(paste(Vars, "~", categorial.var))
- var_Test <-leveneTest(formula, data = QTrap.Semiquant.Data.normalise)
+ var_Test <-leveneTest(formula, data = Qtrap.filterd.data.scaled)
   cat("Variable:",Vars, "\n")
   print(var_Test)
   cat("\n")
@@ -234,23 +247,48 @@ for (Vars in continuous.vars) {
 # Perform Kruskal-Wallis test for each variable
 for (vars in continuous.vars) {
   formula <- as.formula(paste(vars, "~", categorial.var))
-  kruskal_model <- kruskal.test(formula, data = QTrap.Semiquant.Data.normalise)
+  kruskal_model <- kruskal.test(formula, data = Qtrap.filterd.data.scaled)
   cat("Variable:", vars, "\n")
   print(kruskal_model)
   cat("\n")
 }
 
 
-# Perform ANOVA and display summary for each model
+# Perform Dunn test
 for (Vars in continuous.vars) {
   formula <- as.formula(paste(Vars, "~", categorial.var))
-  aov.model <-aov(formula, data = QTrap.Semiquant.Data.normalise)
-  Tuckey.test <- TukeyHSD(aov.model)
+  Pairwise_test <-dunn_test(formula, data = Qtrap.filterd.data.scaled)
   cat("Variable:",Vars, "\n")
-  print(summary(aov.model))
-  print(Tuckey.test)
+  print(Pairwise_test)
   cat("\n")
 }
+```
+
+```{r}
+library(ggstatsplot)
+library(rlang)
+
+StatBoxplot <- function(y) {
+  y_sym <- sym(y)
+  plot <- ggbetweenstats(
+    data = Qtrap.filterd.data.scaled,
+    x = Class,
+    y = !!y_sym,
+    type = "nonparametric",
+    plot.type = "box",
+    pairwise.comparisons = TRUE,
+    pairwise.display = "all",
+    centrality.plotting = FALSE,
+    bf.message = FALSE,
+    ylab = y
+  )
+  
+  return(plot)
+}
+
+StatBoxplot("3-MeHis")
+StatBoxplot("HPPA")
+StatBoxplot("HVAlc")
 ```
 
 ### Regression
@@ -259,7 +297,7 @@ for (Vars in continuous.vars) {
 # Perform Regression for each continuous variable
 for (Vars in continuous.vars) {
   formula <- as.formula(paste(Vars, "~", categorial.var))
-  LM.model <-lm(formula, data = QTrap.Semiquant.Data.normalise)
+  LM.model <-lm(formula, data = Qtrap.filterd.data.scaled)
   cat("Variable:",Vars, "\n")
   print(summary(LM.model))
   cat("\n")
@@ -274,7 +312,7 @@ set.seed(2000)
 control <- rfeControl(functions = rfFuncs, method = "cv", number = 10)
 
 # Run the RFE algorithm
-results <- rfe(QTrap.Semiquant.Data.normalise[, 3:54], QTrap.Semiquant.Data.normalise[, 2], sizes = c(1:8), rfeControl = control)
+results <- rfe(Qtrap.filterd.data.scaled[, 3:54], Qtrap.filterd.data.scaled[, 2], sizes = c(1:8), rfeControl = control)
 
 # Summarize the results
 print(results)
@@ -285,7 +323,7 @@ predictors(results)
 
 library(Boruta)
 # Decide if a variable is important or not using Boruta
-boruta_output <- Boruta(Class ~ ., data=na.omit(QTrap.Semiquant.Data.normalise), doTrace=2)  # perform Boruta search
+boruta_output <- Boruta(Class ~ ., data=na.omit(Qtrap.filterd.data.scaled), doTrace=2)  # perform Boruta search
 
 boruta_signif <- names(boruta_output$finalDecision[boruta_output$finalDecision %in% c("Confirmed", "Tentative")])  # collect Confirmed and Tentative variables
 

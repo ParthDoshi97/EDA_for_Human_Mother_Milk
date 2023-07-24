@@ -57,7 +57,7 @@ str(Targeted.biomarkers.data)
 
 # Select the columns containing "IU" or "MU" in their names
 Targeted.biomarkers.data <- Targeted.biomarkers.data %>%
-  select(Sample, contains(c("IU", "MU"))) %>%
+   select(Sample, contains(c("IU", "MU"))) %>%
 
   # Transpose the data to convert it from wide to long format
   t() %>%
@@ -74,7 +74,7 @@ Targeted.biomarkers.data <- Targeted.biomarkers.data %>%
 colnames(Targeted.biomarkers.data) <- gsub("\\s*\\(umol\\/g creat\\)", "", colnames(Targeted.biomarkers.data))
 
 # Display the Summary statistic
-skimmed_target <-  skim_to_list(Targeted.biomarkers.data)
+skimmed_target <-  skim(Targeted.biomarkers.data)
 skimmed_target
 
 # Save the clean data to a CSV file
@@ -107,17 +107,17 @@ print(results)
 ##### Remove the variable with constant value and few unique values 
 ```{r}
 Targeted.biomarkers.data <- Targeted.biomarkers.data %>% 
-  select(-`3-IPA`,-Daidzein,-Equol,-Glycitein,-Genistein)
+  select(-`3-IPA`,-Daidzein,-Equol,-Glycitein,-Genistein, -Kaempferol)
 ```
 ### Data Preprocessing 
 
-```{r}
+```{r warning=FALSE}
 # Data Distribution
 # Gather columns 3 to 14 into a long format
 Targeted.biomarkers.data.long.A <- gather(Targeted.biomarkers.data[3:14])
 
 # Gather columns 15 to 24 into a long format
-Targeted.biomarkers.data.long.B <- gather(Targeted.biomarkers.data[15:24])
+Targeted.biomarkers.data.long.B <- gather(Targeted.biomarkers.data[15:23])
 
 # Generate a box plot for Targeted.biomarkers.data.long.A
 ggplot(Targeted.biomarkers.data.long.A, aes(x = value, y = key, fill = key)) +
@@ -128,47 +128,35 @@ ggplot(Targeted.biomarkers.data.long.A, aes(x = value, y = key, fill = key)) +
 ggplot(Targeted.biomarkers.data.long.B, aes(x = value, y = key, fill = key)) +
   geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
   labs(title = "Data Distribution box plot before normalization")
-
-# Calculate skewness for columns 3 to 24
-skewness(Targeted.biomarkers.data[3:24])
-
 ```
 
-### Transfromation of the data using Log10 Tranformation 
-From the skewness you can see data is right skewed therefore using log10 transformation to reduce  skewness
-
+### Standardization 
 ```{r warning=FALSE}
-# log 10 transformation
-# Perform log10 transformation on columns 3 to 24
-Targeted.biomarkers.data.Normal <- as.data.frame(log10(Targeted.biomarkers.data[3:24]))
+# Apply scaling to the data
+# using caret lib to preprocess data
+AutoScaling <- preProcess(Targeted.biomarkers.data, method = c("center","scale"),na.remove = TRUE )
 
-# Replace infinite values with 0
-for (col in names(Targeted.biomarkers.data.Normal)) {
-  Targeted.biomarkers.data.Normal[[col]][!is.finite(Targeted.biomarkers.data.Normal[[col]])] <- 0
-}
+# standardize the preprocessed data
+Targeted.biomarkers.data.Scaled <- predict(AutoScaling,Targeted.biomarkers.data)
 
-# Combine the transformed data with the first two columns from the original data
-Targeted.biomarkers.data.Normal <- cbind(Targeted.biomarkers.data[1:2], Targeted.biomarkers.data.Normal)
 
 # Generate summary statistics for the transformed data
-skimmed_target_normal <- skim_to_list(Targeted.biomarkers.data.Normal)
+skimmed_target_normal <- skim_to_list(Targeted.biomarkers.data.Scaled)
 skimmed_target_normal
 
-# Calculate skewness after the transformation
-skewness(Targeted.biomarkers.data.Normal[3:24])
 
 # Box plot after the transformation
-Targeted.biomarkers.data.Normal.long.A <- gather(Targeted.biomarkers.data.Normal[3:14])
-Targeted.biomarkers.data.Normal.long.B <- gather(Targeted.biomarkers.data.Normal[15:24])
+Targeted.biomarkers.data.Scaled.long.A <- gather(Targeted.biomarkers.data.Scaled[3:14])
+Targeted.biomarkers.data.Scaled.long.B <- gather(Targeted.biomarkers.data.Scaled[15:23])
 
-# Generate a box plot for Targeted.biomarkers.data.Normal.long.A
-ggplot(Targeted.biomarkers.data.Normal.long.A, aes(x = value, y = key, fill = key)) +
+# Generate a box plot for Targeted.biomarkers.data.Scaled.long.A
+ggplot(Targeted.biomarkers.data.Scaled.long.A, aes(x = value, y = key, fill = key)) +
   geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
   labs(title = "Data Distribution box plot before normalization") +
   xlim(-1, 5)
 
-# Generate a box plot for Targeted.biomarkers.data.Normal.long.B
-ggplot(Targeted.biomarkers.data.Normal.long.B, aes(x = value, y = key, fill = key)) +
+# Generate a box plot for Targeted.biomarkers.data.Scaled.long.B
+ggplot(Targeted.biomarkers.data.Scaled.long.B, aes(x = value, y = key, fill = key)) +
   geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
   labs(title = "Data Distribution box plot after normalization") +
   xlim(-1, 5)
@@ -177,28 +165,29 @@ ggplot(Targeted.biomarkers.data.Normal.long.B, aes(x = value, y = key, fill = ke
 
 ```{r}
 # Box plot of data distribution of each group (Mother , PI , TI)
-Targeted.biomarkers.data.Normal %>%
+Targeted.biomarkers.data.Scaled %>%
   gather(key = "feature", value = "value", -Samples, -Class) %>%
   ggplot(aes(x = Class, y = value, fill = Class)) +
   geom_boxplot() +
   facet_wrap(~ feature, scales = "free") +
-  labs(x = "Group", y = "Value")
+  labs(x = "Group", y = "Value") +
+  ylim(-1,4)
 ```
 
 ```{r}
 # Removing the variable which has large  no of outliers  
-Targeted.biomarkers.data.Normal <- Targeted.biomarkers.data.Normal %>% 
-  select(-Quercetin, -Kaempferol, -`1-Methylhistidine`)
+Targeted.biomarkers.data.Scaled <- Targeted.biomarkers.data.Scaled %>% 
+  select(-Quercetin)
 ```
 
 ```{r}
 # Principle component Analysis
-Targeted.biomarkers.Data.Normalise.pca <- prcomp(Targeted.biomarkers.data.Normal[3:22], scale. = TRUE, center = TRUE)
+Targeted.biomarkers.data.Scaled.pca <- prcomp(Targeted.biomarkers.data.Scaled[3:21], scale. = FALSE, center = TRUE)
 
 #Visualization of PCA
-fviz_pca_ind(Targeted.biomarkers.Data.Normalise.pca,
+fviz_pca_ind(Targeted.biomarkers.data.Scaled.pca,
              geom = "point",
-             habillage = Targeted.biomarkers.data.Normal$Class,
+             habillage = Targeted.biomarkers.data.Scaled$Class,
              palette = c("blue", "red","yellow"),
              addEllipses = TRUE,
              ellipse.type="confidence",
@@ -206,32 +195,23 @@ fviz_pca_ind(Targeted.biomarkers.Data.Normalise.pca,
              title = "PCA plot for Qtrap targeted biomarkrs")
 
 #Scree plot 
-fviz_eig(Targeted.biomarkers.Data.Normalise.pca, 
+fviz_eig(Targeted.biomarkers.data.Scaled.pca, 
          addlabels = TRUE, 
          ylim = c(0, 70),
          main="Scree Plot Qtrap targeted Biomarkers")
 
 #Graph for variable
-fviz_pca_var(Targeted.biomarkers.Data.Normalise.pca, col.var = "red")
+fviz_pca_var(Targeted.biomarkers.data.Scaled.pca, col.var = "red")
  
-# biplot
-biplot = ggbiplot(pcobj = Targeted.biomarkers.Data.Normalise.pca,
-                  choices = c(1,2),
-                  scale = 0,
-                  varname.size = 2.5,
-                  varname.abbrev = FALSE,  # Abbreviate variable names (TR
-                  var.axes = TRUE,      # Remove variable vectors (TRUE)
-                  circle = FALSE,        # Add unit variance circle (TRUE
-                  ellipse = FALSE, groups = Targeted.biomarkers.data.Normal$Class) # Adding ellipses
-print(biplot)
+
 ```
 ## Correlation & Covariance
 ```{r}
 # Calculate p-values for each correlation coefficient
-p.mat <- cor_pmat(Targeted.biomarkers.data.Normal[3:22], method = "pearson")
+p.mat <- cor_pmat(Targeted.biomarkers.data.Scaled[3:22], method = "pearson")
 
 # Calculate correlation matrix using Pearson correlation
-correlationMatrix <- cor(Targeted.biomarkers.data.Normal[3:22], method = "pearson")
+correlationMatrix <- cor(Targeted.biomarkers.data.Scaled[3:22], method = "pearson")
 
 # Visualize the correlation matrix using ggcorrplot
 ggcorrplot(
@@ -243,7 +223,7 @@ ggcorrplot(
 )
 
 # Calculate the covariance matrix using Pearson correlation
-cov_df <- cov(Targeted.biomarkers.data.Normal[sapply(Targeted.biomarkers.data.Normal, is.numeric)], method = "pearson")
+cov_df <- cov(Targeted.biomarkers.data.Scaled[sapply(Targeted.biomarkers.data.Scaled, is.numeric)], method = "pearson")
 
 # Convert covariance matrix to correlation matrix
 cov_df <- cov2cor(cov_df)
@@ -266,27 +246,17 @@ print(plot)
 ```
 ### Test of Homogeneity of Variance And ANOVA
 ```{r}
-
-# Perform Shapiro-Wilk test for each numeric variable to check normality
-for (i in 3:ncol(Targeted.biomarkers.data.Normal)) {
-  variable_name <- names(Targeted.biomarkers.data.Normal)[i]
-  result <- shapiro.test(Targeted.biomarkers.data.Normal[, i])
-  cat("Variable:", variable_name, "\n")
-  print(result)
-  cat("\n")
-}
-
-
+library(rstatix)
 # Define the Continuous Variables
 continuous.vars <- c("Phenylpropionylglycine", "Taurine", "Citrulline", "Galactitol", "Isovalerylglycine", "Isobutyrylglycine", "TMAO", "Anserine", "`3-Methylhistidine`", "`L-Kynurenine`", "`L-Tyrosine`", "`O-DMA`", "Phloretin", "Hesperetin", "`Proline betaine`", "`Ferullic Acid Sulfate`", "`Hippuric Acid`", "`3-IAA`")
 
 categorical.var <- "Class"
-Targeted.biomarkers.data.Normal$Class <- factor(Targeted.biomarkers.data.Normal$Class)
+Targeted.biomarkers.data.Scaled$Class <- factor(Targeted.biomarkers.data.Scaled$Class)
 
 # Perform Levene's test to see if all groups have equal variance
 for (vars in continuous.vars) {
   formula <- as.formula(paste(vars, "~", categorical.var))
-  var_test <- leveneTest(formula, data = Targeted.biomarkers.data.Normal)
+  var_test <- leveneTest(formula, data = Targeted.biomarkers.data.Scaled)
   cat("Variable:", vars, "\n")
   print(var_test)
   cat("\n")
@@ -295,31 +265,55 @@ for (vars in continuous.vars) {
 # Perform Kruskal-Wallis test for each variable
 for (vars in continuous.vars) {
   formula <- as.formula(paste(vars, "~", categorical.var))
-  kruskal_model <- kruskal.test(formula, data = Targeted.biomarkers.data.Normal)
+  kruskal_model <- kruskal.test(formula, data = Targeted.biomarkers.data.Scaled)
   cat("Variable:", vars, "\n")
   print(kruskal_model)
   cat("\n")
 }
 
-# Perform ANOVA and display summary for each model
+# Perform Pairwise Comparsion Test
 for (vars in continuous.vars) {
   formula <- as.formula(paste(vars, "~", categorical.var))
-  aov_model <- aov(formula, data = Targeted.biomarkers.data.Normal)
-  tukey_test <- TukeyHSD(aov_model)
+  Pairwise_Test <- dunn_test(formula, data = Targeted.biomarkers.data.Scaled)
   cat("Variable:", vars, "\n")
-  print(summary(aov_model))
-  print(tukey_test)
+  print(Pairwise_Test)
   cat("\n")
 }
 
 ```
+```{r}
+
+library(ggstatsplot)
+library(rlang)
+
+StatBoxplot <- function(y) {
+  y_sym <- sym(y)
+  plot <- ggbetweenstats(
+    data = Targeted.biomarkers.data.Scaled,
+    x = Class,
+    y = !!y_sym,
+    type = "nonparametric",
+    plot.type = "box",
+    pairwise.comparisons = TRUE,
+    pairwise.display = "all",
+    centrality.plotting = FALSE,
+    bf.message = FALSE,
+    ylab = y
+  )
+  
+  return(plot)
+}
+
+StatBoxplot("Galactitol")
+```
 
 ### Regression Test
+
 ```{r}
 # perform regression 
 for (Vars in continuous.vars) {
   formula <- as.formula(paste(Vars, "~", categorical.var))
-  Lm.model <-lm(formula, data = Targeted.biomarkers.data.Normal)
+  Lm.model <-lm(formula, data = Targeted.biomarkers.data.Scaled)
   cat("Variable:",Vars, "\n")
   print(summary(Lm.model))
   cat("\n")
@@ -330,11 +324,11 @@ for (Vars in continuous.vars) {
 ## Feature selection
 #### Feature Selection Using Recursive feature elimination Method
 ```{r}
-Targeted.biomarkers.data.Normal$Class <- factor(Targeted.biomarkers.data.Normal$Class, labels = c("Mother","TI","PI"))
+Targeted.biomarkers.data.Scaled$Class <- factor(Targeted.biomarkers.data.Scaled$Class, labels = c("Mother","TI","PI"))
 # define the control using a random forest selection function
 control <- rfeControl(functions=rfFuncs, method="cv", number=10)
 # run the RFE algorithm
-results <- rfe(Targeted.biomarkers.data.Normal[,3:22], Targeted.biomarkers.data.Normal[,2], sizes=c(1:22), rfeControl=control)
+results <- rfe(Targeted.biomarkers.data.Scaled[,3:22], Targeted.biomarkers.data.Scaled[,2], sizes=c(1:22), rfeControl=control)
 # summarize the results
 print(results)
 # list the chosen features
@@ -343,7 +337,7 @@ predictors(results)
 
 library(Boruta)
 # Decide if a variable is important or not using Boruta
-boruta_output <- Boruta(Class ~ ., data=na.omit(Targeted.biomarkers.data.Normal), doTrace=2)  # perform Boruta search
+boruta_output <- Boruta(Class ~ ., data=na.omit(Targeted.biomarkers.data.Scaled), doTrace=2)  # perform Boruta search
 
 boruta_signif <- names(boruta_output$finalDecision[boruta_output$finalDecision %in% c("Confirmed", "Tentative")])  # collect Confirmed and Tentative variables
 

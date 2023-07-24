@@ -1,0 +1,282 @@
+---
+title: "Month Series"
+author: "Parth Doshi"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Required Library
+
+```{r message=FALSE, warning=FALSE}
+#install.packages("pcutils")
+
+library(tidyverse) # meta package of all tidyverse packages
+library(janitor)
+library(stringr)
+library(caret)
+library(ggplot2)
+library(pcutils)
+library(zoo)
+```
+
+
+## Common Function 
+
+```{r}
+Average_Urine <- function(Data, Parameter) {
+  result_df <- Data %>%
+    group_by(Type,NewClass,Month) %>%
+    summarise(
+      Mean = mean(!!sym(Parameter)),  # Convert parameter to symbol and unquote it
+      SD = sd(!!sym(Parameter)),      # Convert parameter to symbol and unquote it
+      .groups = "drop"                # To avoid issues with tibbles in older versions of dplyr
+    )
+  return(result_df)
+}
+
+# Define the function to calculate the average and SD for a given parameter
+Average_MILK <- function(Data, Parameter) {
+  result_df <- Data %>%
+    group_by(Type,MONTH) %>%
+    summarise(
+      Mean = mean(!!sym(Parameter)),  # Convert parameter to symbol and unquote it
+      SD = sd(!!sym(Parameter)),      # Convert parameter to symbol and unquote it
+      .groups = "drop"                # To avoid issues with tibbles in older versions of dplyr
+    )
+  return(result_df)
+}
+```
+
+
+
+
+## Month Series Analysis for Short chain Fatty Acid
+
+```{r}
+# Load Data Sets
+NSII_SCFA_Urine <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2_Data_With_Time/NSII_SCFA_Urine.csv", sep = ",")
+
+NSII_SCFA_Urine <- as.data.frame(NSII_SCFA_Urine[2:19])
+str(NSII_SCFA_Urine)
+```
+
+## Data PreProcessing 
+
+```{r message=TRUE, warning=TRUE}
+# Min MAX Scaling
+#PreProcess <- preProcess(NSII_SCFA_Urine, method = "range")
+#NSII_SCFA_Urine <- predict(PreProcess, NSII_SCFA_Urine)
+
+# Replace "CEN" and "RBW" with 0, and convert other Month points to numeric
+NSII_SCFA_Urine$Month <- as.numeric(ifelse(NSII_SCFA_Urine$Month %in% c("CEN", "RBW"), 0, NSII_SCFA_Urine$Month))
+
+# Removing the Acetic Acid column as measure of Values Are Missing 
+NSII_SCFA_Urine <- NSII_SCFA_Urine %>% 
+  select(-Acetic)
+
+# Sort the data first by 'ID' and then by 'Month'
+NSII_SCFA_Urine_sorted <- arrange(NSII_SCFA_Urine,Type , ID, Month)
+
+
+# Create an empty list to store the results for each parameter
+SCFA_list <- list()
+
+SCF_acids <- colnames(NSII_SCFA_Urine_sorted[3:13])
+
+for (Acids in SCF_acids) {
+  SCFA_list[[Acids]] <- Average_Urine(NSII_SCFA_Urine_sorted, Acids)
+}
+
+# Combine all data frames in the 'result_list' into one data frame
+SCFA_df <- bind_rows(SCFA_list, .id = "SCFA_Acids")
+
+# Rename the column to 'Parameter'
+colnames(SCFA_df)[1] <- "SCFA_Acids"
+
+SCFA_df <- replace(SCFA_df, is.na(SCFA_df), 0)
+
+SCFA_df
+```
+
+## Time plot SCFA
+
+```{r}
+ggplot(SCFA_df, aes(x = Month, y = Mean, color = interaction(NewClass, Type), group = interaction(NewClass, Type))) +
+  geom_line() +
+  geom_point() +
+  geom_errorbar(aes(ymin = Mean - SD, ymax = Mean + SD), width = 0.1) +
+  facet_wrap(~ SCFA_Acids, scales = "free") +
+  labs(x = "Month", y = "Mean", color = "NewClass_Type Combination") +
+  theme_minimal()
+
+```
+
+## Qtrap Biomarkers
+
+```{r}
+NSIIQ_Targeted_Urine <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2_Data_With_Time/NSII_Qtrap_Targeted_Urine.csv", sep = ",")
+
+str(NSIIQ_Targeted_Urine)
+```
+
+### Data preProcessing 
+
+```{r}
+
+NSIIQ_Targeted_Urine$Type[NSIIQ_Targeted_Urine$Type == "IU2"] <- "IU"
+
+# Replace "CEN" and "RBW" with 0, and convert other Month points to numeric
+NSIIQ_Targeted_Urine$Month <- as.numeric(ifelse(NSIIQ_Targeted_Urine$Month %in% c("CEN", "RBW"), 0, NSIIQ_Targeted_Urine$Month))
+
+
+# Sort the data first by 'ID' and then by 'Month'
+NSIIQ_Targeted_Urine_sorted <- arrange(NSIIQ_Targeted_Urine[-1],Type , ID, Month)
+
+# create a new column with class of Urine to distinguish between IDs Starting With "P" as Preterm And "T" as Term
+NSIIQ_Targeted_Urine_sorted$NewClass <- ifelse(substr(NSIIQ_Targeted_Urine_sorted$ID, 1,1) == "P", "Preterm", "Term") 
+
+# Create an empty list to store the results for each parameter
+Targeted_list <- list()
+
+QT_Biomarkers <- colnames(NSIIQ_Targeted_Urine_sorted[3:29])
+
+for (BM in QT_Biomarkers) {
+  Targeted_list[[BM]] <- Average_Urine(NSIIQ_Targeted_Urine_sorted, BM)
+}
+
+# Combine all data frames in the 'result_list' into one data frame
+Targeted_df <- bind_rows(Targeted_list, .id = "Targeted_Biomarkers")
+
+# Rename the column to 'Parameter'
+colnames(Targeted_df)[1] <- "Targeted_Biomarkers"
+
+```
+
+### Time Plot
+
+```{r}
+ggplot(Targeted_df, aes(x = Month, y = Mean, color = interaction(NewClass, Type), group = interaction(NewClass, Type))) +
+  geom_line() +
+  geom_point() +
+  geom_errorbar(aes(ymin = Mean - SD, ymax = Mean + SD), width = 0.1) +
+  facet_wrap(~ Targeted_Biomarkers, scales = "free") +
+  labs(x = "Month", y = "Mean", color = "NewClass_Type Combination") +
+  theme_minimal()
+```
+
+## MIRIS MILK DATA
+
+```{r}
+NSII_MIRIS_HM <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2_Data_With_Time/NSII_MIRIS_HM.csv", sep = ",")
+
+NSII_MIRIS_HM <- NSII_MIRIS_HM %>% 
+  select(-1,-2)
+str(NSII_MIRIS_HM)
+```
+
+```{r}
+# Replace "Typo_VALUE" with "NEW_VALUE" in the "Month" column
+NSII_MIRIS_HM$MONTH[NSII_MIRIS_HM$MONTH == "6.1"] <- "6"
+NSII_MIRIS_HM$MONTH[NSII_MIRIS_HM$MONTH == "L2"] <- "6"
+NSII_MIRIS_HM$MONTH[NSII_MIRIS_HM$MONTH == "2B"] <- "2"
+NSII_MIRIS_HM$ID[NSII_MIRIS_HM$ID == "P07.6"] <- "P7"
+NSII_MIRIS_HM$ID[NSII_MIRIS_HM$ID == "T54.1HM"] <- "T54"
+
+
+# Replace "CEN" and "RBW" with 0, and convert other Month points to numeric
+NSII_MIRIS_HM$MONTH <- as.numeric(ifelse(NSII_MIRIS_HM$MONTH %in% c("CEN", "RBW"), 0, NSII_MIRIS_HM$MONTH))
+
+# Sort the data first by 'ID' and then by 'Month'
+NSII_MIRIS_HM_sorted <- arrange(NSII_MIRIS_HM, ID, MONTH)
+
+# create a new column with Type of Milk to distinguish between IDs Starting With "P" as Preterm And "T" as Term
+NSII_MIRIS_HM_sorted$Type <- ifelse(substr(NSII_MIRIS_HM_sorted$ID, 1,1) == "P", "Preterm", "Term") 
+
+# Create an empty list to store the results for each parameter
+result_list <- list()
+
+parameters <- colnames(NSII_MIRIS_HM_sorted[2:7])
+
+for (par in parameters) {
+  result_list[[par]] <- Average_MILK(NSII_MIRIS_HM_sorted, par)
+}
+
+# Combine all data frames in the 'result_list' into one data frame
+MIRIS_df <- bind_rows(result_list, .id = "Parameter")
+
+# Rename the column to 'Parameter'
+colnames(MIRIS_df)[1] <- "Parameter"
+```
+
+## Time Plot 
+
+```{r}
+# Create the time plot with mean and sd for each type and parameter
+ggplot(MIRIS_df, aes(x = MONTH, y = Mean, color = Type, group = Type)) +
+  geom_line() +
+  geom_point() +
+  geom_errorbar(aes(ymin = Mean - SD, ymax = Mean + SD), width = 0.1) +
+  facet_wrap(. ~ Parameter, scales = "free") +
+  labs(x = "Month", y = "Mean", color = "Type") +
+  theme_minimal()
+```
+
+## FAMES in HM
+
+```{r}
+NSII_FAMES_HM <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2_Data_With_Time/NSII_FAMES_HM.csv", sep = ",")
+
+NSII_FAMES_HM  <- NSII_FAMES_HM  %>% 
+  select(-1,-Undecanoate,-Tridecanoate,-Tricosanoate,-Heneicosanoate,-Docosanoate,-`cis.10.Pentadecenoic`,-`cis.11.14.17.Eicosatrienoic`)
+str(NSII_FAMES_HM)
+```
+
+
+```{r}
+# Changing the Naming Errors in data
+NSII_FAMES_HM$MONTH[NSII_FAMES_HM$MONTH == "2B"] <- "2"
+NSII_FAMES_HM$MONTH[NSII_FAMES_HM$MONTH == "R"] <- "RBW"
+NSII_FAMES_HM$MONTH[NSII_FAMES_HM$MONTH == "C"] <- "CEN"
+NSII_FAMES_HM$MONTH[NSII_FAMES_HM$MONTH == "2B"] <- "2"
+
+
+# Replace "CEN" and "RBW" with 0, and convert other Month points to numeric
+NSII_FAMES_HM$MONTH <- as.numeric(ifelse(NSII_FAMES_HM$MONTH %in% c("CEN", "RBW"), 0, NSII_FAMES_HM$MONTH))
+
+ # Sort the data first by 'ID' and then by 'Month'
+NSII_FAMES_HM_sorted <- arrange(NSII_FAMES_HM, ID, MONTH)
+
+# create a new column with Type of Milk to distinguish between IDs Starting With "P" as Preterm And "T" as Term
+NSII_FAMES_HM_sorted$Type <- ifelse(substr(NSII_FAMES_HM_sorted$ID, 1,1) == "P", "Preterm", "Term")
+
+
+# Create an empty list to store the results for each parameter
+FAMES_list <- list()
+
+fatty_acids <- colnames(NSII_FAMES_HM_sorted[3:31])
+
+for (Acids in fatty_acids) {
+  FAMES_list[[Acids]] <- Average_MILK(NSII_FAMES_HM_sorted, Acids)
+}
+
+# Combine all data frames in the 'result_list' into one data frame
+FAMES_df <- bind_rows(FAMES_list, .id = "Fatty_Acids")
+
+# Rename the column to 'Parameter'
+colnames(FAMES_df)[1] <- "Fatty_Acids"
+```
+
+```{r}
+# Create the time plot with mean and sd for each type and parameter
+ggplot(FAMES_df, aes(x = MONTH, y = Mean, color = Type, group = Type)) +
+  geom_line() +
+  geom_point() +
+  geom_errorbar(aes(ymin = Mean - SD, ymax = Mean + SD), width = 0.1) +
+  facet_wrap(. ~ Fatty_Acids, scales = "free") +
+  labs(x = "Month", y = "Mean", color = "Type") +
+  theme_minimal()
+```
