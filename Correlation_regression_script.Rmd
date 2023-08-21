@@ -1,0 +1,646 @@
+---
+title: "Milk Nutriention and Biomarker Assosition "
+output: 
+  html_document: 
+    higlight: textamate
+    theme: spacelab
+    toc: yes
+    fig_width: 10
+    fig_height: 9
+    keep_md: yes
+  html_notebook: default
+---
+
+# Introduction
+
+This notebook aims to explore the associations between nutrients and bio-markers using milk samples as the dataset. We will employ two main techniques for analysis: correlation and regression. Correlation will help us identify potential relationships between nutrients and bio-markers, while regression will allow us to predict bio-marker concentrations based on nutrient levels.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  eval = TRUE,
+  echo = TRUE,
+  fig.width = 11, 
+  fig.height = 10, 
+  dpi = 700
+)
+```
+
+```{r,warning=FALSE}
+source("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/R-script/EDA_for_Human_Mother_Milk/Functions.R")
+
+
+# install required Libraries 
+Libraies_requried <- c("tidyverse","caret","ggplot2","ggcorrplot","stats","psych","factoextra","FactoMineR","ranger","party")
+
+check_and_install_libraries(Libraies_requried)
+
+# load Required Libraries
+library(tidyverse)
+library(caret)
+library(ggplot2)
+library(ggcorrplot)
+library(stats)
+library(psych)
+library(factoextra)
+library(FactoMineR)
+library(ranger)
+library(party)
+```
+
+# load Data sets
+
+The data-sets include Short-chain Fatty Acids (SCFA), Qtrap Targeted and Semiquantitative Urinary Bio markers, Nutritional Data from Human Milk (HM) quality using (MIRIS), and Human Milk (HM) Fatty Acids (FAMES)
+
+```{r}
+
+NSII_SCFA_Urine <-  read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/NSII_Corrected_and_Clean_Data/NSII_SCFA_Urine.csv", sep = ",")
+NSII_Qtrap_Targeted_Urine <-  read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/NSII_Corrected_and_Clean_Data/NSII_Qtrap_Targeted_Urine.csv", sep = ",") 
+NSII_Qtrap_Semiquant_Urine <-  read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/NSII_Corrected_and_Clean_Data/NSII_Qtrap_Semiquant_Urine.csv", sep = ",")
+NSII_MIRIS_HM <-  read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/NSII_Corrected_and_Clean_Data/NSII_MIRIS_HM_Subset.csv", sep = ",")
+NSII_FAMES_HM <-  read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/NSII_Corrected_and_Clean_Data/NSII_FAMES_HM_subset.csv", sep = ",")
+
+```
+
+### Data preparation
+
+```{r}
+# remove class unwanted Column from data frame
+NSII_SCFA_Urine <- NSII_SCFA_Urine %>%
+dplyr::select(-X,-Class,-Sample,-NewClass)
+
+NSII_Qtrap_Targeted_Urine <- NSII_Qtrap_Targeted_Urine %>%
+dplyr::select(-X,-Class,-Sample,-NewClass)
+
+NSII_Qtrap_Semiquant_Urine <- NSII_Qtrap_Semiquant_Urine %>%
+dplyr::select(-X,-Class,-Sample,-NewClass)
+
+NSII_MIRIS_HM <- NSII_MIRIS_HM %>% 
+  dplyr::select(-c(1,2,3),-NewClass)
+
+NSII_FAMES_HM <- NSII_FAMES_HM %>%
+  dplyr::select(-c(1,2,3),-NewClass)
+
+
+# edit some of typos in categorial  columns
+
+NSII_MIRIS_HM$Month[NSII_MIRIS_HM$Month == "6.1"] <- "6"
+NSII_MIRIS_HM$Month[NSII_MIRIS_HM$Month == "L2"] <- "6"
+NSII_MIRIS_HM$Month[NSII_MIRIS_HM$Month == "2B"] <- "2"
+NSII_MIRIS_HM$ID[NSII_MIRIS_HM$ID == "P07.6"] <- "P7"
+NSII_MIRIS_HM$ID[NSII_MIRIS_HM$ID == "T54.1HM"] <- "T54"
+NSII_FAMES_HM$Month[NSII_FAMES_HM$Month == "2B"] <- "2"
+NSII_FAMES_HM$Month[NSII_FAMES_HM$Month == "R"] <- "RBW"
+NSII_FAMES_HM$Month[NSII_FAMES_HM$Month == "C"] <- "CEN"
+NSII_FAMES_HM$Month[NSII_FAMES_HM$Month == "2B"] <- "2"
+NSII_Qtrap_Targeted_Urine$Type[NSII_Qtrap_Targeted_Urine$Type == "IU2"] <- "IU"
+
+```
+
+#### Removing features
+
+Removed the features that predominantly consist of missing data, remain constant throughout, or dplyr::select those variable which show variation concerning months.
+
+```{r}
+# Targeted Bio markers
+NSII_Qtrap_Targeted_Urine <- NSII_Qtrap_Targeted_Urine %>%
+  dplyr::select(ID,Month,Type,Phloretin,O.DMA,Hesperetin,L.Tyrosine,X1.Methylhistidine,X3.Methylhistidine,Gallic.Acid)
+
+# SCFA 
+NSII_SCFA_Urine <- NSII_SCFA_Urine %>% 
+  dplyr::select(-Acetic)
+
+# FAMES
+NSII_FAMES_HM <- NSII_FAMES_HM %>% 
+  dplyr::select(-Undecanoate,-Tridecanoate,-Tricosanoate,-Heneicosanoate,-Docosanoate,-`cis.10.Pentadecenoic`,-`cis.11.14.17.Eicosatrienoic`)
+
+# Semiquant Bio markers
+# Calculate the percentage of missing values for each column
+missing_percent <- colSums(NSII_Qtrap_Semiquant_Urine == 0 | NSII_Qtrap_Semiquant_Urine == 0.0) / nrow(NSII_Qtrap_Semiquant_Urine) * 100
+# Get the names of columns with missing values exceeding 50%
+missing_variables <- names(missing_percent[missing_percent > 50])
+NSII_Qtrap_Semiquant_Urine <- NSII_Qtrap_Semiquant_Urine[, !names(NSII_Qtrap_Semiquant_Urine) %in% missing_variables]
+```
+
+#### Data Normalization
+
+```{r}
+# Scaling Data using Box-Cox transformation
+
+NSII_SCFA_Urine_Scaled <- scale_data(NSII_SCFA_Urine)
+NSII_Qtrap_Targeted_Urine_Scaled <- scale_data(NSII_Qtrap_Targeted_Urine)
+NSII_Qtrap_Semiquant_Urine_Scaled <- scale_data(NSII_Qtrap_Semiquant_Urine)
+NSII_MIRIS_HM_Scaled <- scale_data(NSII_MIRIS_HM)
+NSII_FAMES_HM_Scaled <- scale_data(NSII_FAMES_HM)
+
+```
+
+#### spiting data Bio marker data set in Mother and Infants
+
+```{r}
+
+split_and_create_dataframes(NSII_SCFA_Urine_Scaled)
+split_and_create_dataframes(NSII_Qtrap_Targeted_Urine_Scaled)
+split_and_create_dataframes(NSII_Qtrap_Semiquant_Urine_Scaled)
+```
+
+# Correlation
+
+In this we will find correlation between Bio markers And nutrients based on Month
+
+### SCFA VS MILK(MIRIS)
+
+```{r fig.height=9, fig.width=11}
+library(gridExtra)
+
+# merge SCFA and MILK DATA based on ID and MONTH
+merge_SCFA_MIRIS_IU <- merge(NSII_MIRIS_HM_Scaled, NSII_SCFA_Urine_Scaled_IU, by = c("ID","Month"))
+merge_SCFA_MIRIS_MU <- merge(NSII_MIRIS_HM_Scaled, NSII_SCFA_Urine_Scaled_MU, by = c("ID","Month"))
+
+# Converting CEN AND RBW to 0 as they are consider Time 0 
+merge_SCFA_MIRIS_IU <- convert_month_to_zero(merge_SCFA_MIRIS_IU)
+merge_SCFA_MIRIS_MU <- convert_month_to_zero(merge_SCFA_MIRIS_MU)
+
+# split the Data set according to Month 
+split_and_create_dataframe_month(merge_SCFA_MIRIS_IU)
+split_and_create_dataframe_month(merge_SCFA_MIRIS_MU)
+
+
+# Plot Correlation for each month for infants
+
+Plot_1 <- calculate_and_visualize_correlation(merge_SCFA_MIRIS_IU_0,"pearson","Month 0")
+Plot_2 <- calculate_and_visualize_correlation(merge_SCFA_MIRIS_IU_1,"pearson","Month 1")
+Plot_3 <- calculate_and_visualize_correlation(merge_SCFA_MIRIS_IU_2,"pearson","Month 2")
+Plot_4 <- calculate_and_visualize_correlation(merge_SCFA_MIRIS_IU_3,"pearson","Month 3")
+
+combined_plots <- grid.arrange(Plot_1,Plot_2,Plot_3,Plot_4, ncol = 2)
+print(combined_plots)
+ggsave("correlation_plot.png", combined_plots, width = 20, height = 20 , dpi = 320, bg = "transparent")
+
+# Plot Correlation for each month for Mothers
+ calculate_and_visualize_correlation(merge_SCFA_MIRIS_MU_0,"pearson","Month 0")
+ calculate_and_visualize_correlation(merge_SCFA_MIRIS_MU_1,"pearson","Month 1")
+ calculate_and_visualize_correlation(merge_SCFA_MIRIS_MU_2,"pearson","Month 2")
+ calculate_and_visualize_correlation(merge_SCFA_MIRIS_MU_3,"pearson","Month 3")
+```
+
+### SCFA VS Fatty Acids (FAMES)
+
+```{r fig.height=11, fig.width=14}
+# merge SCFA and MILK DATA based on ID and MONTH
+merge_SCFA_FAMES_IU <- merge(NSII_FAMES_HM_Scaled, NSII_SCFA_Urine_Scaled_IU, by = c("ID","Month"))
+merge_SCFA_FAMES_MU <- merge(NSII_FAMES_HM_Scaled, NSII_SCFA_Urine_Scaled_MU, by = c("ID","Month"))
+
+# Converting CEN AND RBW to 0 as they are consider Time 0 
+merge_SCFA_FAMES_IU <- convert_month_to_zero(merge_SCFA_FAMES_IU)
+merge_SCFA_FAMES_MU <- convert_month_to_zero(merge_SCFA_FAMES_MU)
+
+# split the Data set according to Month 
+split_and_create_dataframe_month(merge_SCFA_FAMES_IU)
+split_and_create_dataframe_month(merge_SCFA_FAMES_MU)
+
+
+# Plot Correlation for each month for infants
+
+calculate_and_visualize_correlation(merge_SCFA_FAMES_IU_0,"pearson","correlation plot SCFA(Infants) VS MILK(FAMES) for Month 0")
+calculate_and_visualize_correlation(merge_SCFA_FAMES_IU_1,"pearson","correlation plot SCFA(Infants) VS MILK(FAMES) for Month 1")
+calculate_and_visualize_correlation(merge_SCFA_FAMES_IU_2,"pearson","correlation plot SCFA(Infants) VS MILK(FAMES) for Month 2")
+ calculate_and_visualize_correlation(merge_SCFA_FAMES_IU_3,"pearson","correlation plot SCFA(Infants) VS MILK(FAMES) for Month 3")
+
+# Plot Correlation for each month for Mothers
+
+calculate_and_visualize_correlation(merge_SCFA_FAMES_MU_0,"pearson","correlation plot SCFA(Mother) VS MILK(FAMES) for Month 0 ")
+ calculate_and_visualize_correlation(merge_SCFA_FAMES_MU_1,"pearson","correlation plot SCFA(Mother) VS MILK(FAMES) for Month 1")
+calculate_and_visualize_correlation(merge_SCFA_FAMES_MU_2,"pearson","correlation plot SCFA(Mother) VS MILK(FAMES) for Month 2")
+ calculate_and_visualize_correlation(merge_SCFA_FAMES_MU_3,"pearson","correlation plot SCFA(Mother) VS MILK(FAMES) for Month 3")
+```
+
+#### Targeted bio markers vs MILK(miris)
+
+```{r}
+# merge Targeted Biomkers and MILK DATA based on ID and MONTH
+merge_Targeted_MIRIS_IU <- merge(NSII_MIRIS_HM_Scaled, NSII_Qtrap_Targeted_Urine_Scaled_IU, by = c("ID","Month"))
+merge_Targeted_MIRIS_MU <- merge(NSII_MIRIS_HM_Scaled, NSII_Qtrap_Targeted_Urine_Scaled_MU, by = c("ID","Month"))
+
+# Converting CEN AND RBW to 0 as they are consider Time 0 
+merge_Targeted_MIRIS_IU <- convert_month_to_zero(merge_Targeted_MIRIS_IU)
+merge_Targeted_MIRIS_MU <- convert_month_to_zero(merge_Targeted_MIRIS_MU)
+
+# split the Data set according to Month 
+split_and_create_dataframe_month(merge_Targeted_MIRIS_IU)
+split_and_create_dataframe_month(merge_Targeted_MIRIS_MU)
+
+
+# Plot Correlation for each month for infants
+
+calculate_and_visualize_correlation(merge_Targeted_MIRIS_IU_0,"pearson","correlation plot Targeted(Infants) VS MILK(MIRIS) for Month 0")
+calculate_and_visualize_correlation(merge_Targeted_MIRIS_IU_1,"pearson","correlation plot Targeted(Infants) VS MILK(MIRIS) for Month 1")
+calculate_and_visualize_correlation(merge_Targeted_MIRIS_IU_2,"pearson","correlation plot Targeted(Infants) VS MILK(MIRIS) for Month 2")
+calculate_and_visualize_correlation(merge_Targeted_MIRIS_IU_3,"pearson","correlation plot Targeted(Infants) VS MILK(MIRIS) for Month 3")
+
+# Plot Correlation for each month for Mothers
+
+calculate_and_visualize_correlation(merge_Targeted_MIRIS_MU_0,"pearson","correlation plot Targeted(Mother) VS MILK(MIRIS) for Month 0 ")
+calculate_and_visualize_correlation(merge_Targeted_MIRIS_MU_1,"pearson","correlation plot Targeted(Mother) VS MILK(MIRIS) for Month 1")
+calculate_and_visualize_correlation(merge_Targeted_MIRIS_MU_2,"pearson","correlation plot Targeted(Mother) VS MILK(MIRIS) for Month 2")
+calculate_and_visualize_correlation(merge_Targeted_MIRIS_MU_3,"pearson","correlation plot Targeted(Mother) VS MILK(MIRIS) for Month 3")
+```
+
+#### Targeted bio-markers vs MILK(FAMES)
+
+```{r fig.height=10, fig.width=11}
+# merge Targeted Biomkers and MILK DATA based on ID and MONTH
+merge_Targeted_FAMES_IU <- merge(NSII_FAMES_HM_Scaled, NSII_Qtrap_Targeted_Urine_Scaled_IU, by = c("ID","Month"))
+merge_Targeted_FAMES_MU <- merge(NSII_FAMES_HM_Scaled, NSII_Qtrap_Targeted_Urine_Scaled_MU, by = c("ID","Month"))
+
+# Converting CEN AND RBW to 0 as they are consider Time 0 
+merge_Targeted_FAMES_IU <- convert_month_to_zero(merge_Targeted_FAMES_IU)
+merge_Targeted_FAMES_MU <- convert_month_to_zero(merge_Targeted_FAMES_MU)
+
+# split the Data set according to Month 
+split_and_create_dataframe_month(merge_Targeted_FAMES_IU)
+split_and_create_dataframe_month(merge_Targeted_FAMES_MU)
+
+
+# Plot Correlation for each month for infants
+
+calculate_and_visualize_correlation(merge_Targeted_FAMES_IU_0,"pearson","correlation plot Targeted(Infants) VS MILK(FAMES) for Month 0")
+calculate_and_visualize_correlation(merge_Targeted_FAMES_IU_1,"pearson","correlation plot Targeted(Infants) VS MILK(FAMES) for Month 1")
+calculate_and_visualize_correlation(merge_Targeted_FAMES_IU_2,"pearson","correlation plot Targeted(Infants) VS MILK(FAMES) for Month 2")
+calculate_and_visualize_correlation(merge_Targeted_FAMES_IU_3,"pearson","correlation plot Targeted(Infants) VS MILK(FAMES) for Month 3")
+
+# Plot Correlation for each month for Mothers
+
+calculate_and_visualize_correlation(merge_Targeted_FAMES_MU_0,"pearson","correlation plot Targeted(Mother) VS MILK(FAMES) for Month 0 ")
+calculate_and_visualize_correlation(merge_Targeted_FAMES_MU_1,"pearson","correlation plot Targeted(Mother) VS MILK(FAMES) for Month 1")
+calculate_and_visualize_correlation(merge_Targeted_FAMES_MU_2,"pearson","correlation plot Targeted(Mother) VS MILK(FAMES) for Month 2")
+calculate_and_visualize_correlation(merge_Targeted_FAMES_MU_3,"pearson","correlation plot Targeted(Mother) VS MILK(FAMES) for Month 3")
+```
+
+#### Semiquant bio-markers vs MILK(miris)
+
+```{r fig.height=11, fig.width=10}
+# merge Semiquant Biomkers and MILK DATA based on ID and MONTH
+merge_Semiquant_MIRIS_IU <- merge(NSII_MIRIS_HM_Scaled, NSII_Qtrap_Semiquant_Urine_Scaled_IU, by = c("ID","Month"))
+merge_Semiquant_MIRIS_MU <- merge(NSII_MIRIS_HM_Scaled, NSII_Qtrap_Semiquant_Urine_Scaled_MU, by = c("ID","Month"))
+
+# Converting CEN AND RBW to 0 as they are consider Time 0 
+merge_Semiquant_MIRIS_IU <- convert_month_to_zero(merge_Semiquant_MIRIS_IU)
+merge_Semiquant_MIRIS_MU <- convert_month_to_zero(merge_Semiquant_MIRIS_MU)
+
+# split the Data set according to Month 
+split_and_create_dataframe_month(merge_Semiquant_MIRIS_IU)
+split_and_create_dataframe_month(merge_Semiquant_MIRIS_MU)
+
+
+# Plot Correlation for each month for infants
+
+calculate_and_visualize_correlation(merge_Semiquant_MIRIS_IU_0,"pearson","correlation plot Semiquant(Infants) VS MILK(MIRIS) for Month 0")
+calculate_and_visualize_correlation(merge_Semiquant_MIRIS_IU_1,"pearson","correlation plot Semiquant(Infants) VS MILK(MIRIS) for Month 1")
+calculate_and_visualize_correlation(merge_Semiquant_MIRIS_IU_2,"pearson","correlation plot Semiquant(Infants) VS MILK(MIRIS) for Month 2")
+calculate_and_visualize_correlation(merge_Semiquant_MIRIS_IU_3,"pearson","correlation plot Semiquant(Infants) VS MILK(MIRIS) for Month 3")
+
+# Plot Correlation for each month for Mothers
+
+calculate_and_visualize_correlation(merge_Semiquant_MIRIS_MU_0,"pearson","correlation plot Semiquant(Mother) VS MILK(MIRIS) for Month 0")
+calculate_and_visualize_correlation(merge_Semiquant_MIRIS_MU_1,"pearson","correlation plot Semiquant(Mother) VS MILK(MIRIS) for Month 1")
+calculate_and_visualize_correlation(merge_Semiquant_MIRIS_MU_2,"pearson","correlation plot Semiquant(Mother) VS MILK(MIRIS) for Month 2")
+calculate_and_visualize_correlation(merge_Semiquant_MIRIS_MU_3,"pearson","correlation plot Semiquant(Mother) VS MILK(MIRIS) for Month 3")
+```
+
+#### Semiquant bio markers vs MILK(FAMES)
+
+```{r fig.height=10, fig.width=11}
+# merge Semiquant Biomkers and MILK DATA based on ID and MONTH
+merge_Semiquant_FAMES_IU <- merge(NSII_FAMES_HM_Scaled, NSII_Qtrap_Semiquant_Urine_Scaled_IU, by = c("ID","Month"))
+merge_Semiquant_FAMES_MU <- merge(NSII_FAMES_HM_Scaled, NSII_Qtrap_Semiquant_Urine_Scaled_MU, by = c("ID","Month"))
+
+# Converting CEN AND RBW to 0 as they are consider Time 0 
+merge_Semiquant_FAMES_IU <- convert_month_to_zero(merge_Semiquant_FAMES_IU)
+merge_Semiquant_FAMES_MU <- convert_month_to_zero(merge_Semiquant_FAMES_MU)
+
+# split the Data set according to Month 
+split_and_create_dataframe_month(merge_Semiquant_FAMES_IU)
+split_and_create_dataframe_month(merge_Semiquant_FAMES_MU)
+
+
+# Plot Correlation for each month for infants
+
+calculate_and_visualize_correlation(merge_Semiquant_FAMES_IU_0,"pearson","correlation plot Semiquant(Infants) VS MILK(FAMES) for Month 0")
+calculate_and_visualize_correlation(merge_Semiquant_FAMES_IU_1,"pearson","correlation plot Semiquant(Infants) VS MILK(FAMES) for Month 1")
+calculate_and_visualize_correlation(merge_Semiquant_FAMES_IU_2,"pearson","correlation plot Semiquant(Infants) VS MILK(FAMES) for Month 2")
+calculate_and_visualize_correlation(merge_Semiquant_FAMES_IU_3,"pearson","correlation plot Semiquant(Infants) VS MILK(FAMES) for Month 3")
+
+# Plot Correlation for each month for Mothers
+
+calculate_and_visualize_correlation(merge_Semiquant_FAMES_MU_0,"pearson","correlation plot Semiquant(Mother) VS MILK(FAMES) for Month 0 ")
+calculate_and_visualize_correlation(merge_Semiquant_FAMES_MU_1,"pearson","correlation plot Semiquant(Mother) VS MILK(FAMES) for Month 1")
+calculate_and_visualize_correlation(merge_Semiquant_FAMES_MU_2,"pearson","correlation plot Semiquant(Mother) VS MILK(FAMES) for Month 2")
+calculate_and_visualize_correlation(merge_Semiquant_FAMES_MU_3,"pearson","correlation plot Semiquant(Mother) VS MILK(FAMES) for Month 3")
+```
+
+# Regression
+
+In this study, we will employ a Multiple Regression model to predict the levels of Short-Chain Fatty Acids (SCFA) using Milk data, specifically MIRIS and FAMES, from various months. The primary objective is to develop a predictive model that can estimate SCFA levels in different months based on data collected from other months. By establishing such a model, we aim to explore the potential relationships between Milk components and SCFA levels and investigate whether these relationships hold true across different time periods.
+
+## MILK (MIRIS)
+
+#### Regression model for Month 0
+
+```{r}
+library(Metrics)
+# Regression model for Month 1 
+# remove Categorical variable
+merge_SCFA_MIRIS_IU_0_new <- merge_SCFA_MIRIS_IU_0 %>% 
+  dplyr::select(-Month,-Type,-ID,)
+merge_SCFA_MIRIS_IU_1_new <- merge_SCFA_MIRIS_IU_0 %>% 
+  dplyr::select(-Month,-Type,-ID,)
+merge_SCFA_MIRIS_IU_2_new <- merge_SCFA_MIRIS_IU_0 %>% 
+  dplyr::select(-Month,-Type,-ID,)
+merge_SCFA_MIRIS_IU_3_new <- merge_SCFA_MIRIS_IU_0 %>% 
+  dplyr::select(-Month,-Type,-ID,)
+
+
+# Split the data into training (70%) and testing (30%) sets
+train_index <- sample(1:nrow(merge_SCFA_MIRIS_IU_0_new), 0.7 * nrow(merge_SCFA_MIRIS_IU_0_new))
+train_data <- merge_SCFA_MIRIS_IU_0_new[train_index, ]
+test_data <- merge_SCFA_MIRIS_IU_0_new[-train_index, ]
+
+
+
+# Create a matrix of the dependent variables (SCFAs)
+scfa_matrix <- train_data %>% 
+  dplyr::select(7:17)
+scfa_matrix <- as.matrix(scfa_matrix)
+
+# Build the multiple linear regression model
+model_miris_IU_0 <- lm(scfa_matrix ~ Fat + Crude_Protein + True_Protein, data = train_data)
+summary(model_miris_IU_0)
+
+# Make predictions on the test data using the model
+predictions <- predict(model_miris_IU_0, newdata = test_data)
+# RMSE Values
+model_stat_0 <- calculate_mse_and_rmse(test_data,predictions)
+print(" rmse values for month 0")
+print(model_stat_0$rmse)
+
+# # Make predictions on the month 1 data using the model of month 0
+prediction_month_1 <- predict(model_miris_IU_0, merge_SCFA_MIRIS_IU_1_new)
+model_stat_0_1 <- calculate_mse_and_rmse(merge_SCFA_MIRIS_IU_1_new,prediction_month_1)
+print(" rmse values for month 1")
+print(model_stat_0_1$rmse)
+
+# # Make predictions on the month 2 data using the model of month 0
+prediction_month_2 <- predict(model_miris_IU_0, merge_SCFA_MIRIS_IU_2_new)
+model_stat_0_2 <- calculate_mse_and_rmse(merge_SCFA_MIRIS_IU_2_new,prediction_month_2)
+print(" rmse values for month 2")
+print(model_stat_0_2$rmse)
+
+# # Make predictions on the month 3 data using the model of month 0
+prediction_month_3 <- predict(model_miris_IU_0, merge_SCFA_MIRIS_IU_3_new)
+model_stat_0_3 <- calculate_mse_and_rmse(merge_SCFA_MIRIS_IU_3_new,prediction_month_3)
+print(" rmse values for month 3")
+print(model_stat_0_3$rmse)
+```
+
+#### Regression model for Month 1
+
+```{r}
+# Split the data into training (70%) and testing (30%) sets
+train_index_1 <- sample(1:nrow(merge_SCFA_MIRIS_IU_1_new), 0.7 * nrow(merge_SCFA_MIRIS_IU_1_new))
+train_data_1 <- merge_SCFA_MIRIS_IU_0_new[train_index_1, ]
+test_data_1 <- merge_SCFA_MIRIS_IU_0_new[-train_index_1, ]
+
+scfa_matrix_1 <- train_data_1 %>% 
+  dplyr::select(7:17)
+scfa_matrix_1 <- as.matrix(scfa_matrix_1)
+
+# Build the multiple linear regression model
+model_miris_IU_1 <- lm(scfa_matrix_1 ~ Fat + Crude_Protein + True_Protein + Carbohydates , data = train_data_1)
+summary(model_miris_IU_1)
+
+# Make predictions on the test data using the model
+predictions_1 <- predict(model_miris_IU_1, newdata = test_data_1)
+model_stat_1 <- calculate_mse_and_rmse(test_data_1,predictions_1)
+print(" rmse values for month 1")
+print(model_stat_1$rmse)
+
+# Make predictions on the month 2 data using the model of month 1
+prediction_month_1_2 <- predict(model_miris_IU_1, merge_SCFA_MIRIS_IU_2_new)
+# Calculate the Mean Squared Error (MSE) for each SCFA
+model_stat_1_2 <- calculate_mse_and_rmse(merge_SCFA_MIRIS_IU_2_new,prediction_month_1_2)
+print(" rmse values for month 2")
+print(model_stat_1_2$rmse)
+
+# Make predictions on the month 3 data using the model of month 1
+prediction_month_1_3 <- predict(model_miris_IU_1, merge_SCFA_MIRIS_IU_3_new)
+# Calculate the Mean Squared Error (MSE) for each SCFA
+model_stat_1_3 <- calculate_mse_and_rmse(merge_SCFA_MIRIS_IU_3_new,prediction_month_1_3)
+print(" rmse values for month 3")
+print(model_stat_1_3$rmse)
+
+```
+
+#### Regression model for Month 2
+
+```{r}
+# Split the data into training (70%) and testing (30%) sets
+train_index_2 <- sample(1:nrow(merge_SCFA_MIRIS_IU_2_new), 0.7 * nrow(merge_SCFA_MIRIS_IU_2_new))
+train_data_2 <- merge_SCFA_MIRIS_IU_0_new[train_index_2, ]
+test_data_2 <- merge_SCFA_MIRIS_IU_0_new[-train_index_2, ]
+
+scfa_matrix_2 <- train_data_2 %>% 
+  dplyr::select(7:17)
+
+scfa_matrix_2 <- as.matrix(scfa_matrix_2)
+
+# Build the multiple linear regression model
+model_miris_IU_2 <- lm(scfa_matrix_2 ~ Fat + Crude_Protein + True_Protein + Carbohydates , data = train_data_1)
+summary(model_miris_IU_2)
+
+# Make predictions on the test data using the model
+predictions_2 <- predict(model_miris_IU_2, newdata = test_data_2)
+# Calculate the Mean Squared Error (MSE) for each SCFA
+model_stat_2 <- calculate_mse_and_rmse(test_data_2,predictions_2)
+print(" rmse values for month 2")
+print(model_stat_2$rmse)
+
+# Make predictions on the month 3 using the model for month 2
+prediction_month_2_3 <- predict(model_miris_IU_1, merge_SCFA_MIRIS_IU_3_new)
+# Calculate the Mean Squared Error (MSE) for each SCFA
+model_stat_2_3 <- calculate_mse_and_rmse(merge_SCFA_MIRIS_IU_2_new,prediction_month_2_3)
+print(" rmse values for month 3")
+print(model_stat_2_3$rmse) 
+
+```
+
+#### Regression model for Month 3
+
+```{r}
+
+```
+
+## MILK (FAMES)
+
+regression using milk fatty acids to predict Short chain fatty acids
+
+### Feature selection using carat as there to select fatty acids
+
+##### Using correlation method
+
+```{r}
+# month 0 (RBW and CEN)
+Corr_SCFA_FAMES_IU_0 <- cor(merge_SCFA_FAMES_IU_0[3:34])
+highlycorrelareated_0 <- findCorrelation(Corr_SCFA_FAMES_IU_0, cutoff = 0.75)
+# Get the names of highly correlated variables for month 0
+highlycorrelated_names_0 <- colnames(merge_SCFA_FAMES_IU_0[3:34][, highlycorrelareated_0])
+print("Month 0")
+print(highlycorrelated_names_0)
+
+# month 1
+Corr_SCFA_FAMES_IU_1 <- cor(merge_SCFA_FAMES_IU_1[3:42])
+highlycorrelareated_1 <- findCorrelation(Corr_SCFA_FAMES_IU_1, cutoff = 0.75)
+highlycorrelated_names_1 <- colnames(merge_SCFA_FAMES_IU_1[3:42][, highlycorrelareated_1])
+print("Month 1")
+print(highlycorrelated_names_1)
+
+# month 2
+Corr_SCFA_FAMES_IU_2 <- cor(merge_SCFA_FAMES_IU_2[3:42])
+highlycorrelareated_2 <- findCorrelation(Corr_SCFA_FAMES_IU_2, cutoff = 0.75)
+highlycorrelated_names_2 <- colnames(merge_SCFA_FAMES_IU_2[3:42][, highlycorrelareated_2])
+print("Month 2")
+print(highlycorrelated_names_2)
+
+# month 3
+Corr_SCFA_FAMES_IU_3 <- cor(merge_SCFA_FAMES_IU_3[3:42])
+highlycorrelareated_3 <- findCorrelation(Corr_SCFA_FAMES_IU_3, cutoff = 0.75)
+highlycorrelated_names_3 <- colnames(merge_SCFA_FAMES_IU_3[3:42][, highlycorrelareated_3])
+print("Month 3")
+print(highlycorrelated_names_3)
+
+```
+
+#### Using intrinsic method (glmnet) for feature selection
+
+###### Feature selection Method for month 0
+
+```{r fig.width=11, message=FALSE, warning=FALSE}
+set.seed(12345)
+
+# Remove the fatty acids which show high correlation
+merge_SCFA_FAMES_IU_0 <- merge_SCFA_FAMES_IU_0 %>% dplyr::select(-cis.5.8.11.14.17.Eicosapentaenoic,-Stearate,-Hexanoate, -cis.10.Heptadecenoic,-Myristate,-Heptanoic,-Myristoleate,-cis.11.14.Eicosadienoic,-ID,-Month,-Type)
+
+
+# Feature selection using glmnet method 
+
+SCFA_name <- colnames(merge_SCFA_FAMES_IU_0[23:32])
+# Loop through each SCFA
+for (scfa in SCFA_name) {
+  glmnet <- train(as.formula(paste(scfa, "~ .")), 
+                  data = merge_SCFA_FAMES_IU_0, 
+                  method = 'glmnet', 
+                  metric = "MAE")
+  
+  # Compute variable importance
+  impVar <- varImp(glmnet)
+  
+  # Create variable importance plot using ggplot
+ # Create variable importance plot using ggplot
+  vi_plot <- ggplot(impVar, aes(x = variable, y = Overall, label = scfa)) +
+    geom_bar(stat = "identity", fill = "#53cfff", width = 0.50 ) +
+    theme_light(base_size = 20) +
+    theme(axis.title.x = element_text(size = 15, colour = "black"),
+          axis.title.y = element_blank(),
+          axis.text.x = element_text(size = 15, colour = "black"),
+          axis.text.y = element_text(size = 15, colour = "black")) +
+    ggtitle(paste("Variable importance for", scfa))
+  
+  
+  # Print the variable importance plot
+  print(vi_plot)
+}
+
+```
+
+##### Regression for Month 0
+
+```{r}
+set.seed(123)  # For reproducibility
+FAMES_index_0 <- sample(1:nrow(merge_SCFA_FAMES_IU_0), 0.7 * nrow(merge_SCFA_FAMES_IU_0))
+FAMES_train_data_0 <- merge_SCFA_FAMES_IU_0[FAMES_index_0, ]
+FAMES_test_data_0 <- merge_SCFA_FAMES_IU_0[-FAMES_index_0, ]
+
+
+scfa_matrix_0 <- merge_SCFA_FAMES_IU_0 %>% 
+  dplyr::dplyr::select(23:32)
+scfa_matrix_0 <- as.matrix(scfa_matrix_0)
+
+install.packages("HH")
+library(HH)
+Propionic_model <- lm(Propionic ~ gamma.Linolenic + Nervonic.acid + Octanoate + Lignocerate ,data = merge_SCFA_FAMES_IU_0 )
+summary(Propionic_model)
+lmplot(Propionic_model)
+Butyric_model <- lm(Butyric ~ Arachidonic + Eicosanoic +  cis.11.Eicosenoic + Erucic.acid +  Palmitate + Palmitoleate + Octanoate + Linoleic + Heptadecanoate ,data = merge_SCFA_FAMES_IU_0)
+summary(Butyric_model)
+
+X2_Me_butyric_model <- lm(X2.Me.butyric ~ Arachidonic + Nervonic.acid +  cis.11.Eicosenoic + Erucic.acid +  Palmitate + Palmitoleate + Linoleic + cis.8.11.14.Eicosatrienoic + cis.4.7.10.13.16.19.Docosahexaenoic + Pentadecanoate+Decanoate + Laurate ,data = merge_SCFA_FAMES_IU_0)
+summary(X2_Me_butyric_model)
+
+
+Isovaleric_model <- lm(Isovaleric ~ gamma.Linolenic + Nervonic.acid + Octanoate + Arachidonic + cis.11.Eicosenoic + Linoleic ,data = merge_SCFA_FAMES_IU_0)
+summary(Isovaleric_model)
+
+Valeric_model <- lm(Valeric ~  Elaidic + Palmitoleate+ Linoleic + Eicosanoic + Linolelaidic + Linolenic + Oleic + Laurate, data = merge_SCFA_FAMES_IU_0)
+summary(Valeric_model)
+
+
+Caporic_model <- lm(Caproic ~ Nervonic.acid + Lignocerate + Arachidonic + cis.11.Eicosenoic + Linoleic + Eicosanoic + Octanoate + Octanoate , data = merge_SCFA_FAMES_IU_0)
+summary(Caporic_model)
+
+
+Valine_model <- lm(Caproic ~ gamma.Linolenic + Arachidonic + Nervonic.acid +  cis.11.Eicosenoic + Linoleic + Eicosanoic ,data = merge_SCFA_FAMES_IU_0)
+summary(Valine_model)
+```
+
+###### Feature selection Method for month 1
+
+```{r message=FALSE, warning=FALSE}
+
+# Remove the fatty acids which show high correlation
+merge_SCFA_FAMES_IU_1 <- merge_SCFA_FAMES_IU_1 %>% dplyr::select(-ID,-Month,-Type,-Octanoate, -Laurate, -Arachidonic, -Eicosanoic, -Myristoleate, -Myristate, -Elaidic, cis.13.16.Docosadienoic, -Heptanoic, -gamma.Linolenic, -Oleic, -Hexanoate, -cis.11.Eicosenoic, -Stearate, -Nervonic.acid, -Heptadecanoate, -Palmitate, -Linolenic )
+
+
+# Feature selection using glmnet method 
+
+# Loop through each SCFA
+for (scfa in SCFA_name) {
+  formula <- as.formula(paste(scfa, "~ Decanoate+Pentadecanoate+Palmitoleate+cis.10.Heptadecenoic + Linoleic+Linolelaidic+cis.11.14.Eicosadienoic+cis.8.11.14.Eicosatrienoic+cis.5.8.11.14.17.Eicosapentaenoic+Erucic.acid+cis.13.16.Docosadienoic+cis.4.7.10.13.16.19.Docosahexaenoic+Lignocerate"))
+  glmnet <- train(formula, 
+                  data = merge_SCFA_FAMES_IU_1, 
+                  method = 'glmnet', 
+                  metric = "MAE")
+  
+  # Compute variable importance
+  impVar <- varImp(glmnet)
+  
+  # Create variable importance plot using ggplot
+  # Create variable importance plot using ggplot
+  vi_plot <- ggplot(impVar, aes(x = variable, y = Overall, label = scfa)) +
+    geom_bar(stat = "identity", fill = "#53cfff", width = 0.50 ) +
+    theme_light(base_size = 20) +
+    theme(axis.title.x = element_text(size = 15, colour = "black"),
+          axis.title.y = element_blank(),
+          axis.text.x = element_text(size = 15, colour = "black"),
+          axis.text.y = element_text(size = 15, colour = "black")) +
+    ggtitle(paste("Variable importance for", scfa))  
+
+  
+  # Print the variable importance plot
+  print(vi_plot)
+}
+```
+
+###### Feature selection Method for month 2
+
+```{r fig.height=11, warning=FALSE}
+
+```

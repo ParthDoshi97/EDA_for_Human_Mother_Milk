@@ -46,8 +46,9 @@ library(car)
 setwd("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/R-script/EDA_for_Human_Mother_Milk")
 
 # load Data set
-Targeted.biomarkers.data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_QTrap_Targeted_Urine.csv", sep = ";", skip = 3)
-str(Targeted.biomarkers.data)
+NSII_Qtrap_Targeted_Urine <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/NSII_Corrected_and_Clean_Data/NSII_Qtrap_Targeted_Urine.csv", dec=",")
+
+str(NSII_Qtrap_Targeted_Urine)
 ```
 
 ## Data Cleaning 
@@ -56,30 +57,17 @@ str(Targeted.biomarkers.data)
 # Data cleaning for Targeted Biomarkers Data
 
 # Select the columns containing "IU" or "MU" in their names
-Targeted.biomarkers.data <- Targeted.biomarkers.data %>%
-   select(Sample, contains(c("IU", "MU"))) %>%
+NSII_Qtrap_Targeted_Urine <- NSII_Qtrap_Targeted_Urine %>%
+   select(-Class) %>%
+  as.data.frame()
 
-  # Transpose the data to convert it from wide to long format
-  t() %>%
-  as.data.frame() %>%
+# Select columns 2 to 13 and convert them to numeric using lapply
+NSII_Qtrap_Targeted_Urine[, 2:28] <- lapply(NSII_Qtrap_Targeted_Urine[, 2:28], as.numeric)
 
-  # Set the first row as column names
-  row_to_names(1) %>%
-  # Convert variables to double (numeric) except for the "Class" column
-  mutate_if(names(.) != "Class", as.double) %>%
-  # Rename the rownames column as "Samples"
-  rownames_to_column(var = "Samples")
-
-# Remove the "(umol/g creat)" part from the column names using regex
-colnames(Targeted.biomarkers.data) <- gsub("\\s*\\(umol\\/g creat\\)", "", colnames(Targeted.biomarkers.data))
 
 # Display the Summary statistic
-skimmed_target <-  skim(Targeted.biomarkers.data)
+skimmed_target <-  skim(NSII_Qtrap_Targeted_Urine)
 skimmed_target
-
-# Save the clean data to a CSV file
-write.csv(Targeted.biomarkers.data, "C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-clean-Data/NUTRISHIELD_Study_II_QTrap_Targeted.csv", row.names = FALSE)
-
 ```
 ### Remove feature with constant value
 ```{r}
@@ -101,31 +89,31 @@ check.constant.or.few.unique <- function(data) {
  pattern_columns <- names(data)[result != "No pattern"]
  return(pattern_columns)
 }
-results <- check.constant.or.few.unique(Targeted.biomarkers.data)
+results <- check.constant.or.few.unique(NSII_Qtrap_Targeted_Urine)
 print(results)
 ```
 ##### Remove the variable with constant value and few unique values 
 ```{r}
-Targeted.biomarkers.data <- Targeted.biomarkers.data %>% 
-  select(-`3-IPA`,-Daidzein,-Equol,-Glycitein,-Genistein, -Kaempferol)
+NSII_Qtrap_Targeted_Urine <- NSII_Qtrap_Targeted_Urine %>% 
+  select(-`X3.IPA`,-Daidzein,-Equol,-Glycitein,-Genistein, -Kaempferol)
 ```
 ### Data Preprocessing 
 
 ```{r warning=FALSE}
 # Data Distribution
 # Gather columns 3 to 14 into a long format
-Targeted.biomarkers.data.long.A <- gather(Targeted.biomarkers.data[3:14])
+NSII_Qtrap_Targeted_Urine_long_A <- gather(NSII_Qtrap_Targeted_Urine[2:10])
 
 # Gather columns 15 to 24 into a long format
-Targeted.biomarkers.data.long.B <- gather(Targeted.biomarkers.data[15:23])
+NSII_Qtrap_Targeted_Urine_long_B <- gather(NSII_Qtrap_Targeted_Urine[11:21])
 
-# Generate a box plot for Targeted.biomarkers.data.long.A
-ggplot(Targeted.biomarkers.data.long.A, aes(x = value, y = key, fill = key)) +
+# Generate a box plot for NSII_Qtrap_Targeted_Urine.long.A
+ggplot(NSII_Qtrap_Targeted_Urine.long.A, aes(x = value, y = key, fill = key)) +
   geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
   labs(title = "Data Distribution box plot before normalization")
 
-# Generate a box plot for Targeted.biomarkers.data.long.B
-ggplot(Targeted.biomarkers.data.long.B, aes(x = value, y = key, fill = key)) +
+# Generate a box plot for NSII_Qtrap_Targeted_Urine_long_B
+ggplot(NSII_Qtrap_Targeted_Urine_long_B, aes(x = value, y = key, fill = key)) +
   geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
   labs(title = "Data Distribution box plot before normalization")
 ```
@@ -134,29 +122,29 @@ ggplot(Targeted.biomarkers.data.long.B, aes(x = value, y = key, fill = key)) +
 ```{r warning=FALSE}
 # Apply scaling to the data
 # using caret lib to preprocess data
-AutoScaling <- preProcess(Targeted.biomarkers.data, method = c("center","scale"),na.remove = TRUE )
+Normalise <- preProcess(NSII_Qtrap_Targeted_Urine, method = c("YeoJohnson"),na.remove = TRUE )
 
 # standardize the preprocessed data
-Targeted.biomarkers.data.Scaled <- predict(AutoScaling,Targeted.biomarkers.data)
+NSII_Qtrap_Targeted_Urine_Normalised <- predict(Normalise,NSII_Qtrap_Targeted_Urine)
 
 
 # Generate summary statistics for the transformed data
-skimmed_target_normal <- skim_to_list(Targeted.biomarkers.data.Scaled)
+skimmed_target_normal <- skim_to_list(NSII_Qtrap_Targeted_Urine_Normalised)
 skimmed_target_normal
 
 
 # Box plot after the transformation
-Targeted.biomarkers.data.Scaled.long.A <- gather(Targeted.biomarkers.data.Scaled[3:14])
-Targeted.biomarkers.data.Scaled.long.B <- gather(Targeted.biomarkers.data.Scaled[15:23])
+NSII_Qtrap_Targeted_Urine_Normalised_long_A <- gather(NSII_Qtrap_Targeted_Urine_Normalised[2:10])
+NSII_Qtrap_Targeted_Urine_Normalised_long_B <- gather(NSII_Qtrap_Targeted_Urine_Normalised[11:21])
 
-# Generate a box plot for Targeted.biomarkers.data.Scaled.long.A
-ggplot(Targeted.biomarkers.data.Scaled.long.A, aes(x = value, y = key, fill = key)) +
+# Generate a box plot for NSII_Qtrap_Targeted_Urine_Normalised.long.A
+ggplot(NSII_Qtrap_Targeted_Urine_Normalised_long_A, aes(x = value, y = key, fill = key)) +
   geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
   labs(title = "Data Distribution box plot before normalization") +
   xlim(-1, 5)
 
-# Generate a box plot for Targeted.biomarkers.data.Scaled.long.B
-ggplot(Targeted.biomarkers.data.Scaled.long.B, aes(x = value, y = key, fill = key)) +
+# Generate a box plot for NSII_Qtrap_Targeted_Urine_Normalised_long_B
+ggplot(NSII_Qtrap_Targeted_Urine_Normalised_long_B, aes(x = value, y = key, fill = key)) +
   geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
   labs(title = "Data Distribution box plot after normalization") +
   xlim(-1, 5)
@@ -165,53 +153,52 @@ ggplot(Targeted.biomarkers.data.Scaled.long.B, aes(x = value, y = key, fill = ke
 
 ```{r}
 # Box plot of data distribution of each group (Mother , PI , TI)
-Targeted.biomarkers.data.Scaled %>%
-  gather(key = "feature", value = "value", -Samples, -Class) %>%
-  ggplot(aes(x = Class, y = value, fill = Class)) +
+NSII_Qtrap_Targeted_Urine_Normalised %>%
+  gather(key = "feature", value = "value", -Sample, -NewClass, -Month, -Type, -ID) %>%
+  ggplot(aes(x = NewClass, y = value, fill = NewClass)) +
   geom_boxplot() +
   facet_wrap(~ feature, scales = "free") +
-  labs(x = "Group", y = "Value") +
-  ylim(-1,4)
+  labs(x = "Group", y = "Value") 
 ```
 
 ```{r}
 # Removing the variable which has large  no of outliers  
-Targeted.biomarkers.data.Scaled <- Targeted.biomarkers.data.Scaled %>% 
-  select(-Quercetin)
+NSII_Qtrap_Targeted_Urine_Normalised <- NSII_Qtrap_Targeted_Urine_Normalised %>% 
+  select(-Quercetin, -Phloretin)
 ```
 
 ```{r}
 # Principle component Analysis
-Targeted.biomarkers.data.Scaled.pca <- prcomp(Targeted.biomarkers.data.Scaled[3:21], scale. = FALSE, center = TRUE)
+NSII_Qtrap_Targeted_Urine_Normalised.pca <- prcomp(NSII_Qtrap_Targeted_Urine_Normalised[2:19], scale. = TRUE, center = TRUE)
 
 #Visualization of PCA
-fviz_pca_ind(Targeted.biomarkers.data.Scaled.pca,
+fviz_pca_ind(NSII_Qtrap_Targeted_Urine_Normalised.pca,
              geom = "point",
-             habillage = Targeted.biomarkers.data.Scaled$Class,
-             palette = c("blue", "red","yellow"),
+             habillage = NSII_Qtrap_Targeted_Urine_Normalised$NewClass,
+             palette = c("blue", "red","green"),
              addEllipses = TRUE,
              ellipse.type="confidence",
              ggtheme = theme_bw(),
              title = "PCA plot for Qtrap targeted biomarkrs")
 
 #Scree plot 
-fviz_eig(Targeted.biomarkers.data.Scaled.pca, 
+fviz_eig(NSII_Qtrap_Targeted_Urine_Normalised.pca, 
          addlabels = TRUE, 
          ylim = c(0, 70),
          main="Scree Plot Qtrap targeted Biomarkers")
 
 #Graph for variable
-fviz_pca_var(Targeted.biomarkers.data.Scaled.pca, col.var = "red")
+fviz_pca_var(NSII_Qtrap_Targeted_Urine_Normalised.pca, col.var = "red")
  
 
 ```
 ## Correlation & Covariance
 ```{r}
 # Calculate p-values for each correlation coefficient
-p.mat <- cor_pmat(Targeted.biomarkers.data.Scaled[3:22], method = "pearson")
+p.mat <- cor_pmat(NSII_Qtrap_Targeted_Urine_Normalised[2:19], method = "pearson")
 
 # Calculate correlation matrix using Pearson correlation
-correlationMatrix <- cor(Targeted.biomarkers.data.Scaled[3:22], method = "pearson")
+correlationMatrix <- cor(NSII_Qtrap_Targeted_Urine_Normalised[2:19], method = "pearson")
 
 # Visualize the correlation matrix using ggcorrplot
 ggcorrplot(
@@ -223,7 +210,7 @@ ggcorrplot(
 )
 
 # Calculate the covariance matrix using Pearson correlation
-cov_df <- cov(Targeted.biomarkers.data.Scaled[sapply(Targeted.biomarkers.data.Scaled, is.numeric)], method = "pearson")
+cov_df <- cov(NSII_Qtrap_Targeted_Urine_Normalised[sapply(NSII_Qtrap_Targeted_Urine_Normalised, is.numeric)], method = "pearson")
 
 # Convert covariance matrix to correlation matrix
 cov_df <- cov2cor(cov_df)
@@ -248,15 +235,15 @@ print(plot)
 ```{r}
 library(rstatix)
 # Define the Continuous Variables
-continuous.vars <- c("Phenylpropionylglycine", "Taurine", "Citrulline", "Galactitol", "Isovalerylglycine", "Isobutyrylglycine", "TMAO", "Anserine", "`3-Methylhistidine`", "`L-Kynurenine`", "`L-Tyrosine`", "`O-DMA`", "Phloretin", "Hesperetin", "`Proline betaine`", "`Ferullic Acid Sulfate`", "`Hippuric Acid`", "`3-IAA`")
+continuous.vars <- colnames(NSII_Qtrap_Targeted_Urine_Normalised[2:19])
 
-categorical.var <- "Class"
-Targeted.biomarkers.data.Scaled$Class <- factor(Targeted.biomarkers.data.Scaled$Class)
+categorical.var <- "NewClass"
+NSII_Qtrap_Targeted_Urine_Normalised$NewClass <- factor(NSII_Qtrap_Targeted_Urine_Normalised$NewClass)
 
 # Perform Levene's test to see if all groups have equal variance
 for (vars in continuous.vars) {
   formula <- as.formula(paste(vars, "~", categorical.var))
-  var_test <- leveneTest(formula, data = Targeted.biomarkers.data.Scaled)
+  var_test <- leveneTest(formula, data = NSII_Qtrap_Targeted_Urine_Normalised)
   cat("Variable:", vars, "\n")
   print(var_test)
   cat("\n")
@@ -265,7 +252,7 @@ for (vars in continuous.vars) {
 # Perform Kruskal-Wallis test for each variable
 for (vars in continuous.vars) {
   formula <- as.formula(paste(vars, "~", categorical.var))
-  kruskal_model <- kruskal.test(formula, data = Targeted.biomarkers.data.Scaled)
+  kruskal_model <- kruskal.test(formula, data = NSII_Qtrap_Targeted_Urine_Normalised)
   cat("Variable:", vars, "\n")
   print(kruskal_model)
   cat("\n")
@@ -274,7 +261,7 @@ for (vars in continuous.vars) {
 # Perform Pairwise Comparsion Test
 for (vars in continuous.vars) {
   formula <- as.formula(paste(vars, "~", categorical.var))
-  Pairwise_Test <- dunn_test(formula, data = Targeted.biomarkers.data.Scaled)
+  Pairwise_Test <- dunn_test(formula, data = NSII_Qtrap_Targeted_Urine_Normalised)
   cat("Variable:", vars, "\n")
   print(Pairwise_Test)
   cat("\n")
@@ -282,17 +269,16 @@ for (vars in continuous.vars) {
 
 ```
 ```{r}
-
 library(ggstatsplot)
 library(rlang)
 
 StatBoxplot <- function(y) {
   y_sym <- sym(y)
   plot <- ggbetweenstats(
-    data = Targeted.biomarkers.data.Scaled,
-    x = Class,
+    data = NSII_Qtrap_Targeted_Urine_Normalised,
+    x = NewClass,
     y = !!y_sym,
-    type = "nonparametric",
+    type = "parametric",
     plot.type = "box",
     pairwise.comparisons = TRUE,
     pairwise.display = "all",
@@ -304,7 +290,13 @@ StatBoxplot <- function(y) {
   return(plot)
 }
 
-StatBoxplot("Galactitol")
+Targeted_Biomakers<- colnames(NSII_Qtrap_Targeted_Urine_Normalised)[2:19]
+
+# Call the StatBoxplot function for each variable in the variables vector
+for (BM in Targeted_Biomakers) {
+  plot <- StatBoxplot(BM)
+  print(plot) # If you want to see each plot, use print() to display them.
+}
 ```
 
 ### Regression Test
@@ -313,7 +305,7 @@ StatBoxplot("Galactitol")
 # perform regression 
 for (Vars in continuous.vars) {
   formula <- as.formula(paste(Vars, "~", categorical.var))
-  Lm.model <-lm(formula, data = Targeted.biomarkers.data.Scaled)
+  Lm.model <-lm(formula, data = NSII_Qtrap_Targeted_Urine_Normalised)
   cat("Variable:",Vars, "\n")
   print(summary(Lm.model))
   cat("\n")
@@ -324,11 +316,13 @@ for (Vars in continuous.vars) {
 ## Feature selection
 #### Feature Selection Using Recursive feature elimination Method
 ```{r}
-Targeted.biomarkers.data.Scaled$Class <- factor(Targeted.biomarkers.data.Scaled$Class, labels = c("Mother","TI","PI"))
+set.seed(123)
+
+NSII_Qtrap_Targeted_Urine_Normalised$NewClass <- factor(NSII_Qtrap_Targeted_Urine_Normalised$NewClass)
 # define the control using a random forest selection function
 control <- rfeControl(functions=rfFuncs, method="cv", number=10)
 # run the RFE algorithm
-results <- rfe(Targeted.biomarkers.data.Scaled[,3:22], Targeted.biomarkers.data.Scaled[,2], sizes=c(1:22), rfeControl=control)
+results <- rfe(NSII_Qtrap_Targeted_Urine_Normalised[,2:19], NSII_Qtrap_Targeted_Urine_Normalised[,24], sizes=c(1:22), rfeControl=control)
 # summarize the results
 print(results)
 # list the chosen features
@@ -337,7 +331,7 @@ predictors(results)
 
 library(Boruta)
 # Decide if a variable is important or not using Boruta
-boruta_output <- Boruta(Class ~ ., data=na.omit(Targeted.biomarkers.data.Scaled), doTrace=2)  # perform Boruta search
+boruta_output <- Boruta(NewClass ~ ., data=na.omit(NSII_Qtrap_Targeted_Urine_Normalised), doTrace=2)  # perform Boruta search
 
 boruta_signif <- names(boruta_output$finalDecision[boruta_output$finalDecision %in% c("Confirmed", "Tentative")])  # collect Confirmed and Tentative variables
 

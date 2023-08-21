@@ -47,39 +47,22 @@ setwd("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)
 ## Data importing & Cleaning
 
 ```{r}
-# Load the FAMES.HM.Data from the CSV file
-FAMES.HM.Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_FAMES_HM.csv", sep = ";", skip = 3) 
-str(FAMES.HM.Data)
+# Load the NSII_FAMES_HM from the CSV file
+NSII_FAMES_HM <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/NSII_Corrected_and_Clean_Data/NSII_FAMES_HM.csv", dec=",")
 
-FAMES.HM.Data <- FAMES.HM.Data %>%
-  # Select relevant columns by excluding "String" and columns containing "NUTRISHIELD" or "X0"
-  select(-String, -contains(c("NUTRISHIELD", "X0"))) %>%
+NSII_FAMES_HM <- NSII_FAMES_HM %>%
+  select(-1,-Class) %>%
   # Remove columns with any missing values
   select_if(~ !any(is.na(.))) %>%
-  # Transpose the data to convert it from wide to long format
-  t() %>%
-  as.data.frame() %>%
-  # Set the first row as column names
-  row_to_names(1) %>%
-  # Convert variables to numeric (except for the "Class" column)
-  mutate_if(names(.) != "Class", as.numeric)
+  as.data.frame() 
+  
+# Select columns 2 to 37 and convert them to numeric using lapply
+NSII_FAMES_HM[, 2:37] <- lapply(NSII_FAMES_HM[, 2:37], as.numeric)
 
-
-colnames(FAMES.HM.Data) <- gsub("\\s*\\(.*?\\)\\s*", "", colnames(FAMES.HM.Data))
-
-# Remove any leading/trailing whitespaces from the column names
-colnames(FAMES.HM.Data) <- trimws(colnames(FAMES.HM.Data))
-
-# Add a new column "Samples" with row names
-FAMES.HM.Data <- rownames_to_column(FAMES.HM.Data, var = "Samples")
 
 # summary Stats
-skimmed_FAMES <- skim(FAMES.HM.Data)
+skimmed_FAMES <- skim(NSII_FAMES_HM)
 skimmed_FAMES
-
-# Save the clean data to a new CSV file
-write.csv(FAMES.HM.Data, "C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-clean-Data/NUTRISHIELD_Study_II_FAMES_HM.csv", row.names = FALSE)
-
 ```
 
 ### Remove feature with constant value
@@ -102,106 +85,106 @@ check.constant.or.few.unique <- function(data) {
  pattern_columns <- names(data)[result != "No pattern"]
  return(pattern_columns)
 }
-results <- check.constant.or.few.unique(FAMES.HM.Data)
+results <- check.constant.or.few.unique(NSII_FAMES_HM)
 print(results)
 ```
 
 ### Remove the variable with constant value and few unique values
 
 ```{r}
-FAMES.HM.Data <- FAMES.HM.Data %>% 
-  select(-Undecanoate,-Tridecanoate,-Tricosanoate,-Heneicosanoate,-Docosanoate,-`cis-10-Pentadecenoic`,-`cis-11,14,17-Eicosatrienoic`)
+NSII_FAMES_HM <- NSII_FAMES_HM %>% 
+  select(-Undecanoate,-Tridecanoate,-Tricosanoate,-Heneicosanoate,-Docosanoate,-`cis.10.Pentadecenoic`,-`cis.11.14.17.Eicosatrienoic`)
 
 # Checking Skewness 
-skewness(FAMES.HM.Data[3:31])
+skewness(NSII_FAMES_HM[2:30])
 ```
 
 ## Normalization and Scaling of Data
 
 ```{r}
-# Scaleization of  data
-#Preprocess <- preProcess(FAMES.HM.Data, method = "BoxCox")
+# Normailization of  data
+Preprocess <- preProcess(NSII_FAMES_HM, method = "BoxCox")
 # standardize the preprocessed data
-#FAMES.HM.Data.Normal <- predict(Preprocess,FAMES.HM.Data)
+NSII_FAMES_HM_Normal <- predict(Preprocess,NSII_FAMES_HM)
 
-FAMES.HM.Data.Normal <- cbind(FAMES.HM.Data[1:2], log10(FAMES.HM.Data[3:31]))
-
-
-# Scaleization of  data
-Autoscale <- preProcess(FAMES.HM.Data.Normal, method = c("center","scale"))
+# Scaling of  data
+#Autoscale <- preProcess(NSII_FAMES_HM_Normal, method = c("center","scale"))
 # standardize the preprocessed data
-FAMES.HM.Data.Scale<- predict(Autoscale,FAMES.HM.Data.Normal)
-FAMES.HM.Data.Scale <- FAMES.HM.Data.Scale %>% 
-  replace(sapply(., is.infinite), 0) %>%
-  replace(sapply(.,is.na), 0)
+#NSII_FAMES_HM_Normal<- predict(Autoscale,NSII_FAMES_HM_Normal)
+#NSII_FAMES_HM_Normal <- NSII_FAMES_HM_Normal %>% 
+#  replace(sapply(., is.infinite), 0) %>%
+#  replace(sapply(.,is.na), 0)
   
 
-skewness(FAMES.HM.Data.Scale[3:31])
+skewness(NSII_FAMES_HM_Normal[2:30])
 
-skimmed_FAMES.Scale <- skim(FAMES.HM.Data.Scale)
-skimmed_FAMES.Scale
+skimmed_FAMES_Scale <- skim(NSII_FAMES_HM_Normal)
+skimmed_FAMES_Scale
 
 
 
 # Converting it into long 
-FAMES.HM.Data.Scale.long <- gather(FAMES.HM.Data.Scale[3:15])
-FAMES.HM.Data.Scale.long.subset <- gather(FAMES.HM.Data.Scale[16:31])
+NSII_FAMES_HM_Normal.long <- gather(NSII_FAMES_HM_Normal[2:15])
+NSII_FAMES_HM_Normal.long.subset <- gather(NSII_FAMES_HM_Normal[16:30])
 
 # box plot after distribution
-FAMES.HM.Data.Scale.boxplot.A <- ggplot(FAMES.HM.Data.Scale.long, aes(x = value, y = key, fill = key))+
+NSII_FAMES_HM_Normal.boxplot.A <- ggplot(NSII_FAMES_HM_Normal.long, aes(x = value, y = key, fill = key))+
   geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
   labs(title = "Scaled FAMES Data Boxplot",)
-print(FAMES.HM.Data.Scale.boxplot.A)
+print(NSII_FAMES_HM_Normal.boxplot.A)
 
 
 # box plot after distribution
-FAMES.HM.Data.Scale.boxplot.B <- ggplot(FAMES.HM.Data.Scale.long.subset, aes(x = value, y = key, fill = key))+
+NSII_FAMES_HM_Normal.boxplot.B <- ggplot(NSII_FAMES_HM_Normal.long.subset, aes(x = value, y = key, fill = key))+
   geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
   labs(title = "Scaled FAMES Data Boxplot",)
-print(FAMES.HM.Data.Scale.boxplot.B)
+print(NSII_FAMES_HM_Normal.boxplot.B)
 ```
 
 ### Box plot of data distribution of each group (Post,Pre,PI,TI)
 
 ```{r}
-FAMES.HM.Data.Scale1 <- subset(FAMES.HM.Data.Scale[1:10])
-FAMES.HM.Data.Scale2 <- cbind(FAMES.HM.Data.Scale[1:2],subset(FAMES.HM.Data.Scale[11:20]))
-FAMES.HM.Data.Scale3 <- cbind(FAMES.HM.Data.Scale[1:2],subset(FAMES.HM.Data.Scale[21:31]))
+NSII_FAMES_HM_Normal_A <- NSII_FAMES_HM_Normal[, c(1:15, 31)]
+NSII_FAMES_HM_Normal_B <- cbind(NSII_FAMES_HM_Normal[1], NSII_FAMES_HM_Normal[16:31])
+str(NSII_FAMES_HM_Normal_A)
 
-# Box plot for 
-boxplot <- function(data){
-data %>%
-    gather(key = "feature", value = "value", -Samples, -Class) %>%
-    ggplot(aes(x = Class, y = value, fill = Class)) +
+# Define the boxplot function
+boxplot <- function(data) {
+  data %>%
+    pivot_longer(cols = -c(Samples, NewClass), names_to = "feature", values_to = "value") %>%
+    ggplot(aes(x = NewClass, y = value, fill = NewClass)) +
     geom_boxplot() +
     facet_wrap(~ feature, scales = "free") +
-    labs(x = "Group", y = "Value")
+    labs(title = "Boxplot of NSII_FAMES_HM_Normal",
+         x = "NewClass",
+         y = "Value")
 }
 
-FAMES.HM.Boxplot.1 <- boxplot(FAMES.HM.Data.Scale1)
-print(FAMES.HM.Boxplot.1)
-FAMES.HM.Boxplot.2 <- boxplot(FAMES.HM.Data.Scale2)
-print(FAMES.HM.Boxplot.2)
-FAMES.HM.Boxplot.3 <- boxplot(FAMES.HM.Data.Scale3)
-print(FAMES.HM.Boxplot.3)
+
+# Create the boxplot for NSII_FAMES_HM_Normal_A
+NSII_FAMES_HM_Normal_A_boxplot <- boxplot(NSII_FAMES_HM_Normal_A)
+print(NSII_FAMES_HM_Normal_A_boxplot)
+
+# Create the boxplot for NSII_FAMES_HM_Normal_B
+NSII_FAMES_HM_Normal_B_boxplot <- boxplot(NSII_FAMES_HM_Normal_B)
+print(NSII_FAMES_HM_Normal_B_boxplot)
+
+
 ```
-```{r}
-FAMES.HM.Data.Scale <- FAMES.HM.Data.Scale %>% 
-  select(-Linolenic,-Linolelaidic,-Lignocerate,-`cis-11-Eicosenoic`)
-```
+
 ## Correlation plot
 
 ```{r}
 # Calculate p-values for each correlation coefficient
-p.mat <- cor_pmat(FAMES.HM.Data.Scale[3:27], method = "pearson")
+p.mat <- cor_pmat(NSII_FAMES_HM_Normal[3:27], method = "pearson")
 
 # Calculate correlation matrix using Pearson correlation
-correlationMatrix <- cor(FAMES.HM.Data.Scale[3:27], method = "pearson")
+correlationMatrix <- cor(NSII_FAMES_HM_Normal[3:27], method = "pearson")
 
 # Visualize the correlation matrix using ggcorrplot
 ggcorrplot(
   correlationMatrix,
-  hc.order = TRUE,   # Hierarchical clustering for reordering variables
+  hc.order = FALSE,   # Hierarchical clustering for reordering variables
   type = "lower",    # Show only the lower triangle of the correlation matrix
   lab = FALSE,        # Show labels for variables
   p.mat = p.mat      # Overlay p-values on the plot
@@ -212,23 +195,17 @@ ggcorrplot(
 
 ```{r}
 library(rstatix)
-# Perform Shapiro-Wilk test for each numeric variable to check Scaleless
-for (i in 3:ncol(FAMES.HM.Data.Scale)) {
-  result <- shapiro.test(FAMES.HM.Data.Scale[, i])
-  print(result)
-}
 
 # Get the names of the continuous variables
-continuous.vars <- c("Hexanoate","Octanoate","Decanoate","Laurate","Myristate","Myristoleate","Pentadecanoate","Palmitate","Palmitoleate","Heptadecanoate","`cis-10-Heptadecenoic`","Stearate","Oleic","Elaidic","Linoleic","`gamma-Linolenic`","Eicosanoic","`cis-11,14-Eicosadienoic`","`cis-8,11,14-Eicosatrienoic`","Arachidonic","`cis-5,8,11,14,17-Eicosapentaenoic`","`Erucic acid`","`cis-13,16-Docosadienoic`","`cis-4,7,10,13,16,19-Docosahexaenoic`","`Nervonic acid`")
+continuous.vars <- colnames(NSII_FAMES_HM_Normal[2:30])
+categorical.var <- "NewClass"
 
-categorical.var <- "Class"
-
-FAMES.HM.Data.Scale$Class <- factor(FAMES.HM.Data.Scale$Class)
+NSII_FAMES_HM_Normal$NewClass <- factor(NSII_FAMES_HM_Normal$NewClass)
 
 # perform levene's test to see if all group has equal variance
 for (vars in continuous.vars) {
   formula <- as.formula(paste(vars, "~", categorical.var))
-  var_test <- levene_test(formula, data = FAMES.HM.Data.Scale)
+  var_test <- levene_test(formula, data = NSII_FAMES_HM_Normal)
   cat("Variable:", vars, "\n")
   print(var_test)
   cat("\n")
@@ -237,7 +214,7 @@ for (vars in continuous.vars) {
 # Perform Kruskal-Wallis test for each variable
 for (vars in continuous.vars) {
   formula <- as.formula(paste(vars, "~", categorical.var))
-  kruskal_model <- kruskal.test(formula, data = FAMES.HM.Data.Scale)
+  kruskal_model <- kruskal.test(formula, data = NSII_FAMES_HM_Normal)
   cat("Variable:", vars, "\n")
   print(kruskal_model)
   cat("\n")
@@ -246,7 +223,7 @@ for (vars in continuous.vars) {
 # Perform Kruskal-Wallis test for each variable
 for (vars in continuous.vars) {
   formula <- as.formula(paste(vars, "~", categorical.var))
- pairwise_test <- dunn_test(formula, data = FAMES.HM.Data.Scale)
+ pairwise_test <- dunn_test(formula, data = NSII_FAMES_HM_Normal)
   cat("Variable:", vars, "\n")
   print(pairwise_test)
   cat("\n")
@@ -258,10 +235,10 @@ for (vars in continuous.vars) {
 ```{r}
 for (var in continuous.vars) {
   # Create a formula specifying the relationship between the continuous variable and the categorical variable
-  formula <- as.formula(paste(var, "~ Class"))
+  formula <- as.formula(paste(var, "~ NewClass"))
   
   # Fit the linear regression model
-  regression.model <- lm(formula, data = FAMES.HM.Data.Scale)
+  regression.model <- lm(formula, data = NSII_FAMES_HM_Normal)
   
   # Print the regression coefficients and summary
   cat("Variable:", var, "\n")
@@ -276,36 +253,36 @@ for (var in continuous.vars) {
 ##### Principle component Analysis
 
 ```{r}
-FAMES.HM.PCA <- prcomp(FAMES.HM.Data.Scale[3:27], scale. = TRUE, center = TRUE)
+NSII_FAMES_HM_PCA <- prcomp(NSII_FAMES_HM_Normal[3:27], scale. = TRUE, center = TRUE)
 
 #Visualization of PCA
-fviz_pca_ind(FAMES.HM.PCA,
+fviz_pca_ind(NSII_FAMES_HM_PCA,
              geom = "point",
-             habillage = FAMES.HM.Data.Scale$Class,
+             habillage = NSII_FAMES_HM_Normal$NewClass,
              palette = c("blue", "red","green","yellow"),
              addEllipses = TRUE,
              ellipse.type="confidence",
              ggtheme = theme_bw(),
              title = "PCA plot for HM Fatty Acids")
 #Scree plot 
-fviz_eig(FAMES.HM.PCA, 
+fviz_eig(NSII_FAMES_HM_PCA, 
          addlabels = TRUE, 
          ylim = c(0, 70),
          main="Scree Plot Fatty Acids")
 
 #Graph for variable
-fviz_pca_var(FAMES.HM.PCA, col.var = "red")
+fviz_pca_var(NSII_FAMES_HM_PCA, col.var = "red")
 ```
 
 # feature selection
 
 ```{r}
-FAMES.HM.Data.Scale$Class <- factor(FAMES.HM.Data.Scale$Class,labels = c("Pre","Post","TI","PI"))
+NSII_FAMES_HM_Normal$NewClass <- factor(NSII_FAMES_HM_Normal$NewClass)
 
 # define the control using a random forest selection function
 control <- rfeControl(functions=rfFuncs, method="cv", number=10)
 # run the RFE algorithm
-results <- rfe(FAMES.HM.Data.Scale[,3:27], FAMES.HM.Data.Scale[,2], sizes=c(1:27), rfeControl=control)
+results <- rfe(NSII_FAMES_HM_Normal[,2:30], NSII_FAMES_HM_Normal[,31], sizes=c(1:27), rfeControl=control)
 # summarize the results
 print(results)
 # list the chosen features
@@ -314,13 +291,9 @@ predictors(results)
 
 library(Boruta)
 # Decide if a variable is important or not using Boruta
-boruta_output <- Boruta(Class ~ ., data=na.omit(FAMES.HM.Data.Scale), doTrace=2)  # perform Boruta search
+boruta_output <- Boruta(NewClass ~ ., data=na.omit(NSII_FAMES_HM_Normal), doTrace=2)  # perform Boruta search
 
 boruta_signif <- names(boruta_output$finalDecision[boruta_output$finalDecision %in% c("Confirmed", "Tentative")])  # collect Confirmed and Tentative variables
 
 plot(boruta_output, cex.axis=.7, las=2, xlab="", main="Variable Importance")  # plot variable
-```
-
-```{r}
-Variable <- c("Hexanoate","Octanoate","Decanoate","Laurate","Myristate","Myristoleate","Pentadecanoate","Palmitate","Palmitoleate","Heptadecanoate","cis-10-Heptadecenoic","Stearate","Oleic","Elaidic","Linoleic","Linolelaidic","gamma-Linolenic","Linolenic","Eicosanoic","cis-11-Eicosenoic","cis-11,14-Eicosadienoic","cis-8,11,14-Eicosatrienoic","Arachidonic","cis-5,8,11,14,17-Eicosapentaenoic","Erucic acid","cis-13,16-Docosadienoic","cis-4,7,10,13,16,19-Docosahexaenoic","Lignocerate","Nervonic acid")
 ```

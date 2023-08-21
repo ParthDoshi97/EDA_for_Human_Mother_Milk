@@ -13,6 +13,7 @@ knitr::opts_chunk$set(dev = "png",
 ```
 
 # Exploratory Data Analysis for SCFA Urine Sample
+In  this we explore the SCFA Short chain fatty acid data to identify potational feature from this data
 
 #### Required library
 
@@ -20,7 +21,7 @@ knitr::opts_chunk$set(dev = "png",
 # install required library
 library(devtools)
 #devtools::install_github("sfirke/janitor")
-devtools::install_github("SkadiEye/deepTL")
+#devtools::install_github("SkadiEye/deepTL")
 
 # load Required libraries
 library(tidyverse) # meta package of all tidyverse packages
@@ -48,102 +49,102 @@ library(car)
 # Set Working Directory
 setwd("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/R-script/EDA_for_Human_Mother_Milk")
 
-#load Data
-SCFA_Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_SCFA_Urine.csv",sep = ";", skip = 3) 
 
-str(SCFA_Data)
+NSII_SCFA_Urine <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/NSII_Corrected_and_Clean_Data/NSII_SCFA_Urine.csv", dec = ",")
+
+str(NSII_SCFA_Urine)
 ```
 
 ## Data Preprocessing
 
 ```{r message=TRUE, warning=FALSE, paged_print=TRUE}
 # Data cleaning: Remove the rest of clinical data
-SCFA_Data <- SCFA_Data %>%
-  select(-c(1:7,9:13,186)) %>%
-  # Transpose the data frame
-  t() %>%
-  # Convert the transposed data frame to a regular data frame
-  as.data.frame() %>%
-  # Set the first row as column names
-  row_to_names(1) %>%
-  # Convert all columns to numeric except the "Class" column
-  mutate_if(names(.) != "Class", as.numeric) %>%
-  # Set the "Sample" column as a separate column named "Sample"
-  rownames_to_column(var = "Sample") %>%
-  # Remove the "(umol/gcreat)" from column names
-  rename_with(~str_remove(., "\\s*\\(umol\\/gcreat\\)"), everything())
+NSII_SCFA_Urine <- NSII_SCFA_Urine %>%
+  select(-1,-Class,) %>%
+  # Convert the data 
+  as.data.frame() 
 
-# Print the summary of the cleaned SCFA_Data
-skimmes <- skim(SCFA_Data)
+# Select columns 2 to 13 and convert them to numeric using lapply
+NSII_SCFA_Urine[, 2:13] <- lapply(NSII_SCFA_Urine[, 2:13], as.numeric)
+
+# Print the summary of the cleaned NSII_SCFA_Urine
+skimmes <- skim_to_wide(NSII_SCFA_Urine)
 skimmes
-
-
-# Write the cleaned data to a CSV file
-write_csv(SCFA_Data,"C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-clean-Data/NUTRISHIELD_Study_II_SCFA_Urine.csv")
 ```
 
 # Data cleaning
 
 ```{r message=FALSE, warning=FALSE}
 # Drop the Acetic Acid column which has a large number of missing values
-SCFA_Data <- SCFA_Data %>%
+NSII_SCFA_Urine <- NSII_SCFA_Urine %>%
   select(-Acetic)
 
 # Data Distribution
 # Convert the data from wide to long format using the gather() function
-SCFA_Data_long <- gather(SCFA_Data[3:13])
+NSII_SCFA_Urine_long <- gather(NSII_SCFA_Urine[2:12])
 
 # Create a boxplot using ggplot
-SCFA_Data_boxplot <- ggplot(SCFA_Data_long, aes(x = value, y = key, fill = key)) +
+NSII_SCFA_Urine_boxplot <- ggplot(NSII_SCFA_Urine_long, aes(x = value, y = key, fill = key)) +
   geom_boxplot(outlier_colour = "red", outlier_shape = 1) +
   labs(title = "Raw SCFA Data Boxplot")
 
 # Print the boxplot
-print(SCFA_Data_boxplot)
+print(NSII_SCFA_Urine_boxplot)
 
-# Calculate the skewness of the columns in SCFA_Data
-skewness(SCFA_Data[3:13])
+# Calculate the skewness of the columns in NSII_SCFA_Urine
+skewness(NSII_SCFA_Urine[2:12])
 ```
 
 ### Normalization of the Data
 
 ```{r}
-# Apply scaling to the data
-# using caret lib to preprocess data
-AutoScaling <- preProcess(SCFA_Data, method = c("scale","center"),na.remove = TRUE )
+# Normalize the Data using boxCox Transformation
 
-# standardize the preprocessed data
-SCFA_Data_scaled <- predict(AutoScaling,SCFA_Data)
+# using caret lib to preprocess data
+Normalise <- preProcess(NSII_SCFA_Urine, method = "YeoJohnson")
+
+# Normalize the preprocessed data
+NSII_SCFA_Urine_Normalised <- predict(Normalise,NSII_SCFA_Urine)
+
+
+# Auto Scaling 
+Scaling <- preProcess(NSII_SCFA_Urine, method = c("center","scale"))
+
+# Normalize the preprocessed data
+NSII_SCFA_Urine_Normalised_Scaled <- predict(Scaling,NSII_SCFA_Urine_Normalised)
+
 
 # Summary statistics after Scaling
-skimmes_normal <- skim_to_list(SCFA_Data_scaled)
+skimmes_normal <- skim(NSII_SCFA_Urine_Normalised_Scaled)
 skimmes_normal
 
-# Calculate the skewness of the scaled data
-skewness(SCFA_Data_scaled[3:13])
+# Calculate the skewness of the Normalized data
+skewness(NSII_SCFA_Urine_Normalised_Scaled[2:12])
 
 
 # Convert the data from wide to long format using the gather() function
-SCFA_Data_scaled_long <- gather(SCFA_Data_scaled[3:13])
+NSII_SCFA_Urine_Normalised_long <- gather(NSII_SCFA_Urine_Normalised_Scaled[2:12])
 
-# Create a boxplot of the scaled data using ggplot
-SCFA_Data_scaled_boxplot <- ggplot(SCFA_Data_scaled_long, aes(x = value, y = key, fill = key)) +
+# Create a box plot of the Normalized data using ggplot
+NSII_SCFA_Urine_Normalised_boxplot <- ggplot(NSII_SCFA_Urine_Normalised_long, aes(x = value, y = key, fill = key)) +
   geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
-  labs(title = "Scaled SCFA Data Boxplot")
+  labs(title = "Normalised SCFA Data Boxplot")
 
-# Print the boxplot
-print(SCFA_Data_scaled_boxplot)
+# Print the box plot
+print(NSII_SCFA_Urine_Normalised_boxplot)
 ```
+
+### Comprative Analysis 
 
 ```{r}
 # Box plot of comparative analysis for each group (Mother, PI, TI)
 
 # Convert the data to long format using gather()
-SCFA_Data_scaled %>%
-  gather(key = "feature", value = "value", -Sample, -Class) %>%
+NSII_SCFA_Urine_Normalised_Scaled %>%
+  gather(key = "feature", value = "value", -Sample, -Month, -ID, -Type, -NewClass) %>%
 
   # Create a boxplot using ggplot
-  ggplot(aes(x = Class, y = value, fill = Class)) +
+  ggplot(aes(x = NewClass, y = value, fill = NewClass)) +
   geom_boxplot() +
 
   # Create separate plots for each feature using facet_wrap()
@@ -156,8 +157,8 @@ SCFA_Data_scaled %>%
 
 ```{r}
 # Remove the features which as large no of outliers seen in above box plot 
-SCFA_Data_scaled <- SCFA_Data_scaled %>% 
-   select(-Isovaleric,-Valeric,-Propionic)
+NSII_SCFA_Urine_Normalised_Scaled <- NSII_SCFA_Urine_Normalised_Scaled %>% 
+   select(-Isovaleric)
 ```
 
 # EDA
@@ -165,43 +166,56 @@ SCFA_Data_scaled <- SCFA_Data_scaled %>%
 ##### Principle component Analysis
 
 ```{r}
-# Perform PCA on the scaled data
-SCFA_Data_scaled_pca <- prcomp(SCFA_Data_scaled[3:10], scale = FALSE, center = FALSE)
+# Perform PCA on the Normalised data
+NSII_SCFA_Urine_Normalised_pca <- prcomp(NSII_SCFA_Urine_Normalised_Scaled[2:11], scale = TRUE, center = TRUE)
 
 # Visualization of PCA
 
 # Plot the individuals (samples) in the PCA space
-fviz_pca_ind(SCFA_Data_scaled_pca,
+fviz_pca_ind(NSII_SCFA_Urine_Normalised_pca,
              geom = "point",
-             habillage = SCFA_Data_scaled$Class,
+             habillage = NSII_SCFA_Urine_Normalised_Scaled$NewClass,
              palette = c("blue", "red", "green"),
              addEllipses = FALSE,
              ggtheme = theme_bw(),
              title = "PCA plot for SCFA biomarkers")
 
 # Scree plot to visualize the explained variance by each principal component
-fviz_eig(SCFA_Data_scaled_pca,
+fviz_eig(NSII_SCFA_Urine_Normalised_pca,
          addlabels = TRUE,
          ylim = c(0, 70),
          main = "Scree Plot SCFA Data")
 
 # Graph showing the contribution of variables to each principal component
-fviz_pca_var(SCFA_Data_scaled_pca, col_var = "red")
+fviz_pca_var(NSII_SCFA_Urine_Normalised_pca, col_var = "red")
+
+var <- get_pca_var(NSII_SCFA_Urine_Normalised_pca)
+PC1 <- fviz_contrib(NSII_SCFA_Urine_Normalised_pca, "var", axes=1, xtickslab.rt = 90)
+PC2 <- fviz_contrib(NSII_SCFA_Urine_Normalised_pca, "var", axes=2, xtickslab.rt = 90)
+PC3 <- fviz_contrib(NSII_SCFA_Urine_Normalised_pca, "var", axes=3, xtickslab.rt = 90)
+PC4 <- fviz_contrib(NSII_SCFA_Urine_Normalised_pca, "var", axes=4, xtickslab.rt = 90)
+PC5 <- fviz_contrib(NSII_SCFA_Urine_Normalised_pca, "var", axes=5, xtickslab.rt = 90)
+
+plot(PC1,main = "Variables percentage contribution of first Principal Components")
+plot(PC2,main = "Variables percentage contribution of Second Principal Components")
+plot(PC3,main = "Variables percentage contribution of Third Principal Components")
+plot(PC4,main = "Variables percentage contribution of Fourth Principal Components")
+plot(PC5,main = "Variables percentage contribution of Fifth Principal Components")
 ```
 
 ### correlation
 
 ```{r}
 # Calculate p-values for each correlation coefficient
-p_mat <- cor_pmat(SCFA_Data_scaled[3:10], method = "pearson")
+p_mat <- cor_pmat(NSII_SCFA_Urine_Normalised_Scaled[3:10], method = "pearson")
 
 # Calculate correlation matrix using Pearson correlation
-correlationMatrix <- cor(SCFA_Data_scaled[3:10], method = "pearson")
+correlationMatrix <- cor(NSII_SCFA_Urine_Normalised_Scaled[3:10], method = "pearson")
 
 # Visualize the correlation matrix using ggcorrplot
 ggcorrplot(
   correlationMatrix,
-  hc.order = TRUE,   # Hierarchical clustering for reordering variables
+  hc.order = FALSE,   # Hierarchical clustering for reordering variables
   type = "lower",    # Show only the lower triangle of the correlation matrix
   lab = TRUE,        # Show labels for variables
   p.mat = p_mat,      # Overlay p-values on the plot
@@ -214,7 +228,7 @@ ggcorrplot(
 
 ```{r}
 # Performing Covariance 
-cov_df <- cov(SCFA_Data_scaled[sapply(SCFA_Data_scaled,is.numeric)], method = "pearson")
+cov_df <- cov(NSII_SCFA_Urine_Normalised_Scaled[sapply(NSII_SCFA_Urine_Normalised_Scaled,is.numeric)], method = "pearson")
 
 # Covnverting Covariance to Correlation 
 cov_df <- cov2cor(cov_df)
@@ -236,42 +250,78 @@ print(plot)
 
 ### Statistical Test
 
+##### Shapiro Test
 ```{r}
 library(rstatix)
-# Define the Continuous Variables and Categorial Variable
-continuous_vars <- c("Isobutyric", "Butyric", "`2-Me-butyric`", "Caproic", "Heptanoic", "Valine", "Leucine", "Isoleucine")
-categorical_var <- "Class"
 
+# Define the Continuous Variables and Categorical Variable
+continuous_vars <- colnames(NSII_SCFA_Urine_Normalised[2:11])
+categorical_var <- "NewClass"
+continuous_vars
 
+# Initialize an empty data frame to store the results
+shapiro_results <- data.frame(Variable = character(0), P_Value = numeric(0), Significant = character(0), stringsAsFactors = FALSE)
+
+# Loop through the continuous variables
+for (vars in continuous_vars) {
+  data_vector <- NSII_SCFA_Urine_Normalised[[vars]]
+  shapiro_result <- shapiro.test(data_vector)
+  
+  # Append the results to the data frame
+  shapiro_results <- rbind(shapiro_results, data.frame(Variable = vars, P_Value = shapiro_result$p.value, Significant = ifelse(shapiro_result$p.value < 0.05, "**", ".")))
+}
+
+# Print the results as a table
+print(shapiro_results)
+
+```
+
+##### Levene's Test
+
+```{r}
 # perform levene's test to see if all group has equal variance
 
-# Update the levels of the Class variable
-SCFA_Data_scaled$Class <- factor(SCFA_Data_scaled$Class)
+# Update the levels of the New Class variable
+NSII_SCFA_Urine_Normalised$NewClass <- factor(NSII_SCFA_Urine_Normalised$NewClass)
 
+
+# Initialize an empty data frame to store the results
+levene_results <- data.frame(Variable = character(0), F_Value = numeric(0), P_Value = numeric(0), stringsAsFactors = FALSE)
+
+# Loop through the continuous variables
 for (vars in continuous_vars) {
   formula <- as.formula(paste(vars, "~", categorical_var))
-  var_test <- leveneTest(formula, data = SCFA_Data_scaled)
-  cat("Variable:", vars, "\n")
-  print(var_test)
-  cat("\n")
+  var_test <- leveneTest(formula, data = NSII_SCFA_Urine_Normalised)
+  levene_results <- rbind(levene_results, data.frame(Variable = vars, F_Value = var_test$`F value`, P_Value = var_test$`Pr(>F)`, Significant = ifelse(var_test$`Pr(>F)` < 0.05, "**", "-")))
 }
 
+levene_results
+```
+
+```{r}
 # Perform Kruskal-Wallis test for each variable
+
+# Initialize an empty data frame to store the Kruskal-Wallis results
+kruskal_results <- data.frame(Variable = character(0), H_Statistic = numeric(0), P_Value = numeric(0), stringsAsFactors = FALSE)
+
+# Loop through the continuous variables
 for (vars in continuous_vars) {
   formula <- as.formula(paste(vars, "~", categorical_var))
-  kruskal_model <- kruskal.test(formula, data = SCFA_Data_scaled)
-  cat("Variable:", vars, "\n")
-  print(kruskal_model)
-  cat("\n")
+  kruskal_model <- kruskal.test(formula, data = NSII_SCFA_Urine_Normalised_Scaled)
+  
+  # Append the results to the data frame
+  kruskal_results <- rbind(kruskal_results, data.frame(Variable = vars, H_Statistic = kruskal_model$statistic, P_Value = kruskal_model$p.value, Significant = ifelse(kruskal_model$p.value < 0.05, "**", "-")))
 }
+
+print(kruskal_results)
 
 # Perform pairwise dunn test and display summary for each model
 for (var in continuous_vars) {
   formula <- as.formula(paste(var, "~", categorical_var))
-  pairwise_test <- dunn_test(formula, data = SCFA_Data_scaled, p.adjust.method = "bonferroni")
-  cat("Variable:", var, "\n")
+  pairwise_test <- dunn_test(formula, data = NSII_SCFA_Urine_Normalised_Scaled, p.adjust.method = "bonferroni")
+  cat("Variable:", var)
   print(pairwise_test)
-  cat("\n")
+  cat("/n")
 }
 
 ```
@@ -282,10 +332,10 @@ for (var in continuous_vars) {
 # Perform Regression for each continuous variable
 for (Vars in continuous_vars) {
   formula <- as.formula(paste(Vars, "~", categorical_var))
-  LM_model <-lm(formula, data = SCFA_Data_scaled)
-  cat("Variable:",Vars, "\n")
+  LM_model <- lm(formula, data = NSII_SCFA_Urine_Normalised_Scaled)
+  cat("Variable:",Vars, "/n")
   print(summary(LM_model))
-  cat("\n")
+  cat("/n")
 }
 ```
 
@@ -294,14 +344,14 @@ for (Vars in continuous_vars) {
 ```{r}
 set.seed(123)
 
-# Update the levels of the Class variable
-SCFA_Data_scaled$Class <- factor(SCFA_Data_scaled$Class)
+# Update the levels of the NewClass variable
+NSII_SCFA_Urine_Normalised_Scaled$NewClass <- factor(NSII_SCFA_Urine_Normalised_Scaled$NewClass)
 
 # Define the control for recursive feature elimination (RFE) using random forest
 control <- rfeControl(functions = rfFuncs, method = "cv", number = 10)
 
 # Run the RFE algorithm
-results <- rfe(SCFA_Data_scaled[, 3:10], SCFA_Data_scaled[, 2], sizes = c(1:8), rfeControl = control)
+results <- rfe(NSII_SCFA_Urine_Normalised_Scaled[, 2:11], NSII_SCFA_Urine_Normalised_Scaled[, 15], sizes = c(1:8), rfeControl = control)
 
 # Summarize the results
 print(results)
@@ -312,7 +362,7 @@ predictors(results)
 
 library(Boruta)
 # Decide if a variable is important or not using Boruta
-boruta_output <- Boruta(Class ~ ., data=na.omit(SCFA_Data_scaled), doTrace=2)  # perform Boruta search
+boruta_output <- Boruta(NewClass ~ ., data = na.omit(NSII_SCFA_Urine_Normalised_Scaled), doTrace = 2)  # perform Boruta search
 
 boruta_signif <- names(boruta_output$finalDecision[boruta_output$finalDecision %in% c("Confirmed", "Tentative")])  # collect Confirmed and Tentative variables
 
@@ -321,16 +371,18 @@ plot(boruta_output, cex_axis=7, las=2, xlab="", main="Variable Importance")  # p
 
 
 ```{r}
+# Load required libraries
 library(ggstatsplot)
 library(rlang)
 
+# Define the custom function StatBoxplot
 StatBoxplot <- function(y) {
   y_sym <- sym(y)
   plot <- ggbetweenstats(
-    data = SCFA_Data_scaled,
-    x = Class,
+    data = NSII_SCFA_Urine_Normalised_Scaled,
+    x = NewClass,
     y = !!y_sym,
-    type = "nonparametric",
+    type = "parametric",
     plot.type = "box",
     pairwise.comparisons = TRUE,
     pairwise.display = "all",
@@ -342,18 +394,13 @@ StatBoxplot <- function(y) {
   return(plot)
 }
 
+variables <- colnames(NSII_SCFA_Urine_Normalised)[2:11]
 
-mat <- matrix(1:4, 3, 4 ,byrow = TRUE)
+# Call the StatBoxplot function for each variable in the variables vector
+for (Var in variables) {
+  plot <- StatBoxplot(Var)
+  print(plot) # If you want to see each plot, use print() to display them.
+}
 
-variables <- c("Isobutyric", "Butyric", "2-Me-butyric", "Caproic", "Heptanoic", "Valine", "Leucine", "Isoleucine")
 
-layout(mat)
-StatBoxplot(y = "Isobutyric")
-StatBoxplot(y = "Butyric")
-StatBoxplot(y = "2-Me-butyric")
-StatBoxplot(y = "Caproic")
-StatBoxplot(y = "Valine")
-StatBoxplot(y = "Heptanoic")
-StatBoxplot(y = "Leucine")
-StatBoxplot(y = "Isoleucine")
 ```
