@@ -18,7 +18,7 @@ knitr::opts_chunk$set(dev = "png",
 ```{r Library, warning=FALSE, include=FALSE, mesasge=FALSE}
 # install required library
 library(devtools)
-devtools::install_github("sfirke/janitor")
+#devtools::install_github("sfirke/janitor")
 
 # load Required libraries
 library(tidyverse) # meta package of all tidyverse packages
@@ -43,32 +43,26 @@ library(car)
 setwd("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/R-script/EDA_for_Human_Mother_Milk")
 
 #load Data
-QTrap.Semiquant.Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_QTrap_Semiquant_Urine.csv",sep = ",", skip = 2) 
+QTrap_Semiquant_Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/NSII_Corrected_and_Clean_Data/NSII_Qtrap_Semiquant_Urine.csv",sep = ",") 
 
-str(QTrap.Semiquant.Data)
+str(QTrap_Semiquant_Data)
 ```
 
 ## Data cleaning
 
 ```{r}
 #  Cleaning the data sets 
-QTrap.Semiquant.Data <- QTrap.Semiquant.Data %>%
-  select(-c(1:7), -c(9:13)) %>% # Select columns with names containing "IU" or "MU" 
-  t() %>% # Transpose the data Frame
-  as.data.frame() %>%
-  row_to_names(1) %>% # Use the first row as column names
-  mutate_if(names(.) != "Class", as.double)
-
-# Add a new column named "Samples" with row names
-QTrap.Semiquant.Data <-rownames_to_column(QTrap.Semiquant.Data, var = "Samples")
+QTrap_Semiquant_Data <- QTrap_Semiquant_Data %>%
+  select(-X,-Class) %>% # Select columns with names containing "IU" or "MU" 
+  as.data.frame()
 
 # Print summary of QTrap Semiquant Data
- summary(QTrap.Semiquant.Data)
+ summary(QTrap_Semiquant_Data)
 ```
-```{r warning=FALSE}
 
+```{r warning=FALSE}
 # Calculate the percentage of missing values for each column
-missing.percent <- colSums(QTrap.Semiquant.Data == 0 | QTrap.Semiquant.Data == 0.0) / nrow(QTrap.Semiquant.Data) * 100
+missing.percent <- colSums(QTrap_Semiquant_Data == 0 | QTrap_Semiquant_Data == 0.0) / nrow(QTrap_Semiquant_Data) * 100
 
 # Print the percentage of missing values for each column
 print(missing.percent)
@@ -78,96 +72,93 @@ missing.variables <- names(missing.percent[missing.percent > 50])
 
 # Print the names of columns with missing values exceeding 50%
 print(missing.variables)
-
-
 ```
 
 ### Remove feature with constant value
 
 ```{r paged.print=TRUE}
 # Assuming your dataset is named 'data'
-Qtrap.filterd.data <- QTrap.Semiquant.Data[, !names(QTrap.Semiquant.Data) %in% missing.variables]
-skimmed <- skim_to_wide(Qtrap.filterd.data)
+Qtrap_filterd_data <- QTrap_Semiquant_Data[, !names(QTrap_Semiquant_Data) %in% missing.variables]
+skimmed <- skim_to_wide(Qtrap_filterd_data)
 skimmed
 ```
 
 ## Data Prepossessing
 
 ```{r}
-skewness(Qtrap.filterd.data[3:54])
+skewness(Qtrap_filterd_data[3:39])
 ```
 
 ```{r}
 #scaling Of Data
 # using caret lib to preprocess data
-Normalization <- preProcess(Qtrap.filterd.data, method = "BoxCox",na.remove = TRUE )
+Normalization <- preProcess(Qtrap_filterd_data, method = "YeoJohnson",na.remove = TRUE )
 
 # standardize the preprocessed data
-Qtrap.filterd.data.normal <- predict(Normalization,Qtrap.filterd.data)
+Qtrap_filterd_data_normal <- predict(Normalization,Qtrap_filterd_data)
 
 #scaling Of Data
 # using caret lib to preprocess data
-AutoScaling <- preProcess(Qtrap.filterd.data, method = c("scale","center"),na.remove = TRUE )
+AutoScaling <- preProcess(Qtrap_filterd_data_normal, method = c("scale","center"),na.remove = TRUE )
 
 # standardize the preprocessed data
-Qtrap.filterd.data.scaled <- predict(AutoScaling,Qtrap.filterd.data)
+Qtrap_filterd_data_scaled <- predict(AutoScaling,Qtrap_filterd_data_normal)
 
 
 # Replacing the value Infinite value  with 0 
-#for (col in names(Qtrap.filterd.data.scaled)) {
-#  Qtrap.filterd.data.scaled[[col]][!is.finite(Qtrap.filterd.data.scaled[[col]])] <- 0
+#for (col in names(Qtrap_filterd_data_scaled)) {
+#  Qtrap_filterd_data_scaled[[col]][!is.finite(Qtrap_filterd_data_scaled[[col]])] <- 0
 #}
-#Qtrap.filterd.data.scaled <- cbind(QTrap.Semiquant.Data[1:2],Qtrap.filterd.data.scaled)
+#Qtrap_filterd_data_scaled <- cbind(QTrap_Semiquant_Data[1:2],Qtrap_filterd_data_scaled)
 
 # Calculate the skewness of the scaled data
-skewness(Qtrap.filterd.data.scaled[3:54])
+skewness(Qtrap_filterd_data_scaled[3:39])
 
 # Summary statistics
-skimmed_normal <-skim(Qtrap.filterd.data.scaled)
+skimmed_normal <-skim(Qtrap_filterd_data_scaled)
 skimmed_normal
 ```
 
 ### Visualization of Data 
 
 ```{r}
-Qtrap.filterd.data.scaled.longA <- gather(Qtrap.filterd.data.scaled[3:25])
-Qtrap.filterd.data.scaled.longB <- gather(Qtrap.filterd.data.scaled[26:54])
+Qtrap_filterd_data_scaled_long_A <- gather(Qtrap_filterd_data_scaled[2:24])
+Qtrap_filterd_data_scaled_long_B <- gather(Qtrap_filterd_data_scaled[25:39])
 
 # box plot after distribution for Subset 
-Qtrap.filterd.data.scaled.boxplotA <- ggplot(Qtrap.filterd.data.scaled.longA, aes(x = value, y = key, fill = key))+
+Qtrap_filterd_data_scaled.boxplotA <- ggplot(Qtrap_filterd_data_scaled_long_A, aes(x = value, y = key, fill = key))+
   geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
   labs(title = "Qtrap filtered data Boxplot",)
-print(Qtrap.filterd.data.scaled.boxplotA)
+print(Qtrap_filterd_data_scaled.boxplotA)
 
 # box plot after distribution for Subset 
-Qtrap.filterd.data.scaled.boxplotB <- ggplot(Qtrap.filterd.data.scaled.longB, aes(x = value, y = key, fill = key))+
+Qtrap_filterd_data_scaled.boxplotB <- ggplot(Qtrap_filterd_data_scaled_long_B, aes(x = value, y = key, fill = key))+
   geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
   labs(title = "Qtrap filtered data Boxplot",)
-print(Qtrap.filterd.data.scaled.boxplotB)
+print(Qtrap_filterd_data_scaled.boxplotB)
 
 
 ```
 
-```{r}
+```{r fig.height=10, fig.width=11}
+Qtrap_filterd_data_scaled_subset_A <- Qtrap_filterd_data_scaled %>% 
+  select(-c(26:39))
 
-Qtrap.filterd.data.scaled.subset.A <- Qtrap.filterd.data.scaled %>% 
-  select(-c(26:54))
-
-Qtrap.filterd.data.scaled.subset.B <- Qtrap.filterd.data.scaled %>% 
-  select(-c(3:25))
+Qtrap_filterd_data_scaled_subset_B <- Qtrap_filterd_data_scaled %>% 
+  select(-c(2:25))
 
 # Box plot of data distribution of each group (Mother , PI , TI)
-Qtrap.filterd.data.scaled.subset.A %>%
-  gather(key = "feature", value = "value", -Samples, -Class) %>%
-  ggplot(aes(x = Class, y = value, fill = Class)) +
+Qtrap_filterd_data_scaled_subset_A %>%
+  gather(key = "feature", value = "value", -Sample, -NewClass, -Month, -ID, -Type) %>%
+  ggplot(aes(x = NewClass, y = value, fill = NewClass)) +
   geom_boxplot() +
   facet_wrap(~ feature, scales = "free") +
   labs(x = "Group", y = "Value")
 
 
-Qtrap.filterd.data.scaled.subset.B %>%
-  gather(key = "feature", value = "value", -Samples, -Class) %>%
-  ggplot(aes(x = Class, y = value, fill = Class)) +
+Qtrap_filterd_data_scaled_subset_B %>%
+  gather(key = "feature", value = "value", -Sample, -NewClass,-Month, -ID, -Type) %>%
+  ggplot(aes(x = NewClass, y = value, fill = NewClass)) +
   geom_boxplot() +
   facet_wrap(~ feature, scales = "free") +
   labs(x = "Group", y = "Value")
@@ -177,12 +168,12 @@ Qtrap.filterd.data.scaled.subset.B %>%
 
 ```{r echo=FALSE}
 # Principle component Analysis
-QTrap.Semiquant.Data.pca <- prcomp(Qtrap.filterd.data.scaled[3:54], scale. = TRUE, center = TRUE)
+QTrap_Semiquant_Data.pca <- prcomp(Qtrap_filterd_data_scaled[3:39], scale. = TRUE, center = TRUE)
 
 #Visualization of PCA
-fviz_pca_ind(QTrap.Semiquant.Data.pca,
+fviz_pca_ind(QTrap_Semiquant_Data.pca,
              geom = "point",
-             habillage = Qtrap.filterd.data.scaled$Class,
+             habillage = Qtrap_filterd_data_scaled$NewClass,
              palette = c( "red", "green2","blue"),
              addEllipses = TRUE,
              ellipse_type = "confidence",
@@ -190,22 +181,22 @@ fviz_pca_ind(QTrap.Semiquant.Data.pca,
              title = "PCA plot for Qtrap Semiquant biomarkrs")
 
 #Scree plot 
-fviz_eig(QTrap.Semiquant.Data.pca, 
+fviz_eig(QTrap_Semiquant_Data.pca, 
          addlabels = TRUE, 
          ylim = c(0, 70),
          main="Figure 5: Scree Plot  Qtrap Semiquant ")
 
 #Graph for variable
-fviz_pca_var(QTrap.Semiquant.Data.pca, col.var = "red")
+fviz_pca_var(QTrap_Semiquant_Data.pca, col.var = "red")
 ```
 
 #### corelation
 
 ```{r echo=FALSE}
 # Calculate p-values for each correlation coefficient
-p.mat <- cor_pmat(Qtrap.filterd.data.scaled[3:54], method = "pearson")
+p.mat <- cor_pmat(Qtrap_filterd_data_scaled[2:39], method = "pearson")
 # calculate correlation matrix
-correlationMatrix <- cor(Qtrap.filterd.data.scaled[3:54])
+correlationMatrix <- cor(Qtrap_filterd_data_scaled[2:39])
 # summarize the correlation matrix
 #print(correlationMatrix)
 ggcorrplot(
@@ -221,46 +212,76 @@ ggcorrplot(
 ```{r echo=TRUE}
 library(rstatix)
 
-# Factor the  class 
-Qtrap.filterd.data.scaled$Class <- factor(Qtrap.filterd.data.scaled$Class)
+# Define the Continuous Variables and Categorical Variable
+continuous_vars <- colnames(Qtrap_filterd_data_scaled[2:39])
+categorical_var <- "NewClass"
+continuous_vars
 
-# define the  Contentious Variables
-continuous.vars <- c("`EC-G`", "`1,7-DMU`", "`1-MeHis`", "`1-MU`", "`1-MX`", "`2-Aph`", "`2-FG`",
-                    "`3-MeHis`", "`3-MX`", "`4-HPB`", "`5-HMFG`", "ANS", "AsB", "CF", "CARN",
-                    "CRN", "`cLeu-Pro`", "`cPro-Val`", "`L-CAR`", "`N-MePYR`", "PB", "TB",
-                    "`TF-PX`", "TRIGO", "HBA", "`HBA-S`", "HPAA", "`HPAA-S1`", "`3-HPHPA`",
-                    "HPPA", "THPV", "`3,4-DHPAA`", "`DHPV-S`", "`3-HHA`", "`4-HHA`", "`4-MeCAT-S`",
-                    "BA", "`CA-S`", "`CAT-S`", "`Et-S`", "FA", "`GA-S`", "HA", "HVAlc", "`HPPA-S`",
-                    "`MeGA-S`", "`MePYR-S`", "`2-HPA-S`", "`COU-G`", "`COU-S`", "`SYR-S`", "TAR")
+# Initialize an empty data frame to store the results
+shapiro_results <- data.frame(Variable = character(0), P_Value = numeric(0), Significant = character(0), stringsAsFactors = FALSE)
 
-categorial.var <- "Class"
-
-# Perform levene's test
-for (Vars in continuous.vars) {
-  formula <- as.formula(paste(Vars, "~", categorial.var))
- var_Test <-leveneTest(formula, data = Qtrap.filterd.data.scaled)
-  cat("Variable:",Vars, "\n")
-  print(var_Test)
-  cat("\n")
+# Loop through the continuous variables
+for (vars in continuous_vars) {
+  data_vector <- Qtrap_filterd_data_scaled[[vars]]
+  shapiro_result <- shapiro.test(data_vector)
+  
+  # Append the results to the data frame
+  shapiro_results <- rbind(shapiro_results, data.frame(Variable = vars, P_Value = shapiro_result$p.value, Significant = ifelse(shapiro_result$p.value < 0.05, "**", ".")))
 }
 
+# Print the results as a table
+print(shapiro_results)
+
+```
+
+### Levene's Test
+
+```{r}
+# perform levene's test to see if all group has equal variance
+
+# Update the levels of the New Class variable
+Qtrap_filterd_data_scaled$NewClass <- factor(Qtrap_filterd_data_scaled$NewClass)
+
+
+# Initialize an empty data frame to store the results
+levene_results <- data.frame(Variable = character(0), F_Value = numeric(0), P_Value = numeric(0), stringsAsFactors = FALSE)
+
+# Loop through the continuous variables
+for (vars in continuous_vars) {
+  formula <- as.formula(paste(vars, "~", categorical_var))
+  var_test <- leveneTest(formula, data = Qtrap_filterd_data_scaled)
+  levene_results <- rbind(levene_results, data.frame(Variable = vars, F_Value = var_test$`F value`, P_Value = var_test$`Pr(>F)`, Significant = ifelse(var_test$`Pr(>F)` < 0.05, "**", "-")))
+}
+
+levene_results
+```
+
+###  Kruskal-walis test
+
+```{r}
 # Perform Kruskal-Wallis test for each variable
-for (vars in continuous.vars) {
-  formula <- as.formula(paste(vars, "~", categorial.var))
-  kruskal_model <- kruskal.test(formula, data = Qtrap.filterd.data.scaled)
-  cat("Variable:", vars, "\n")
-  print(kruskal_model)
-  cat("\n")
+
+# Initialize an empty data frame to store the Kruskal-Wallis results
+kruskal_results <- data.frame(Variable = character(0), H_Statistic = numeric(0), P_Value = numeric(0), stringsAsFactors = FALSE)
+
+# Loop through the continuous variables
+for (vars in continuous_vars) {
+  formula <- as.formula(paste(vars, "~", categorical_var))
+  kruskal_model <- kruskal.test(formula, data = Qtrap_filterd_data_scaled)
+  
+  # Append the results to the data frame
+  kruskal_results <- rbind(kruskal_results, data.frame(Variable = vars, H_Statistic = kruskal_model$statistic, P_Value = kruskal_model$p.value, Significant = ifelse(kruskal_model$p.value < 0.05, "**", "-")))
 }
 
+print(kruskal_results)
 
-# Perform Dunn test
-for (Vars in continuous.vars) {
-  formula <- as.formula(paste(Vars, "~", categorial.var))
-  Pairwise_test <-dunn_test(formula, data = Qtrap.filterd.data.scaled)
-  cat("Variable:",Vars, "\n")
-  print(Pairwise_test)
-  cat("\n")
+# Perform pairwise dunn test and display summary for each model
+for (var in continuous_vars) {
+  formula <- as.formula(paste(var, "~", categorical_var))
+  pairwise_test <- dunn_test(formula, data = Qtrap_filterd_data_scaled, p.adjust.method = "bonferroni")
+  cat("Variable:", var)
+  print(pairwise_test)
+  cat("/n")
 }
 ```
 
@@ -271,8 +292,8 @@ library(rlang)
 StatBoxplot <- function(y) {
   y_sym <- sym(y)
   plot <- ggbetweenstats(
-    data = Qtrap.filterd.data.scaled,
-    x = Class,
+    data = Qtrap_filterd_data_scaled,
+    x = NewClass,
     y = !!y_sym,
     type = "nonparametric",
     plot.type = "box",
@@ -286,21 +307,22 @@ StatBoxplot <- function(y) {
   return(plot)
 }
 
-StatBoxplot("3-MeHis")
-StatBoxplot("HPPA")
-StatBoxplot("HVAlc")
+for(var in continuous_vars){
+  StatBoxplot(var)
+}
+
 ```
 
 ### Regression
 
 ```{r}
 # Perform Regression for each continuous variable
-for (Vars in continuous.vars) {
-  formula <- as.formula(paste(Vars, "~", categorial.var))
-  LM.model <-lm(formula, data = Qtrap.filterd.data.scaled)
-  cat("Variable:",Vars, "\n")
+for (Vars in continuous_vars) {
+  formula <- as.formula(paste(Vars, "~", categorical_var))
+  LM.model <-lm(formula, data = Qtrap_filterd_data_scaled)
+  cat("Variable:",Vars, "/n")
   print(summary(LM.model))
-  cat("\n")
+  cat("/n")
 }
 ```
 
@@ -312,7 +334,7 @@ set.seed(2000)
 control <- rfeControl(functions = rfFuncs, method = "cv", number = 10)
 
 # Run the RFE algorithm
-results <- rfe(Qtrap.filterd.data.scaled[, 3:54], Qtrap.filterd.data.scaled[, 2], sizes = c(1:8), rfeControl = control)
+results <- rfe(Qtrap_filterd_data_scaled[, 3:39], Qtrap_filterd_data_scaled[, 57], sizes = c(1:8), rfeControl = control)
 
 # Summarize the results
 print(results)
@@ -323,7 +345,7 @@ predictors(results)
 
 library(Boruta)
 # Decide if a variable is important or not using Boruta
-boruta_output <- Boruta(Class ~ ., data=na.omit(Qtrap.filterd.data.scaled), doTrace=2)  # perform Boruta search
+boruta_output <- Boruta(NewClass ~ ., data=na.omit(Qtrap_filterd_data_scaled), doTrace=2)  # perform Boruta search
 
 boruta_signif <- names(boruta_output$finalDecision[boruta_output$finalDecision %in% c("Confirmed", "Tentative")])  # collect Confirmed and Tentative variables
 
