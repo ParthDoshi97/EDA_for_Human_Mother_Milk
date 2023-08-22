@@ -19,9 +19,10 @@ knitr::opts_chunk$set(dev = "png",
 ```{r message=FALSE, warning=FALSE}
 # install required library
 library(devtools)
-devtools::install_github("sfirke/janitor")
+#devtools::install_github("sfirke/janitor")
 #install.packages("DescTools")
 #install.packages("skimr")
+
 # load Required libraries
 library(tidyverse) # meta package of all tidyverse packages
 library(janitor) # 
@@ -46,35 +47,22 @@ library(car)
 setwd("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/R-script/EDA_for_Human_Mother_Milk")
 
 #load Data
-MIRIS.HM.Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-Data/NUTRISHIELD_Study_II_MIRIS_HM.csv",sep = ",", skip = 2)
-str(MIRIS.HM.Data)
+MIRIS_HM_Data <- read.csv("C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/NSII_Corrected_and_Clean_Data/NSII_MIRIS_HM.csv",sep = ",")
+str(MIRIS_HM_Data)
 
+MIRIS_HM_Data <- as.data.frame(MIRIS_HM_Data)
 
-MIRIS.HM.Data <-  MIRIS.HM.Data %>%
-  # Finding specific pattern to select the sample from data set
-  select(-c(1:7,9:12)) %>%
-  select_if(~ !any(is.na(.))) %>%
-  t() %>%
-  as.data.frame() %>%
-  row_to_names(1) %>%
-  mutate_all(as.numeric)
- 
-     
-MIRIS.HM.Data <- rownames_to_column(MIRIS.HM.Data,var = "Samples")
+# Select columns 2 to 13 and convert them to numeric using lapply
+MIRIS_HM_Data[, 2:7] <- lapply(MIRIS_HM_Data[, 2:7], as.numeric)
+  
 
 # assigning new names to the columns of the data frame
-colnames(MIRIS.HM.Data) <- c("Samples","Fat","Crude_Protein","Carbohydates","TS","Energy","True_Protein")
-
-write.csv(MIRIS.HM.Data,"C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-clean-Data/NUTRISHIELD_Study_II_MIRIS_HM.csv")
+write.csv(MIRIS_HM_Data,"C:/Users/Parth Doshi/Dropbox/Nutrishield_Study_II_Project (ParthD thesis)/Study2-clean-Data/NUTRISHIELD_Study_II_MIRIS_HM.csv")
 ```
 
 ```{r}
-skimmed_MIRIS <- skim(MIRIS.HM.Data)
+skimmed_MIRIS <- skim(MIRIS_HM_Data)
 skimmed_MIRIS
-
-# check for Skewness
-print("skewness Score")
-skewness(MIRIS.HM.Data[2:7])
 ```
 
 ## Data Prepossessing
@@ -82,52 +70,38 @@ skewness(MIRIS.HM.Data[2:7])
 ```{r warning=FALSE}
 
 # using caret lib to preprocess data
-Normalization <- preProcess(MIRIS.HM.Data, method = c("BoxCox"),na.remove = TRUE )
+Normalization <- preProcess(MIRIS_HM_Data, method = "BoxCox",na.remove = TRUE )
 
 # Normalization the preprocessed data
-MIRIS.HM.Data.normal <- predict(Normalization,MIRIS.HM.Data)
+MIRIS_HM_Data_normal <- predict(Normalization,MIRIS_HM_Data)
 
 # using caret lib to preprocess data
-standardise <- preProcess(MIRIS.HM.Data.normal, method = c("center","scale"),na.remove = TRUE )
+standardise <- preProcess(MIRIS_HM_Data_normal, method = c("center","scale"),na.remove = TRUE )
 
 # Normalization the preprocessed data
-MIRIS.HM.Data.scale <- predict(Normalization,MIRIS.HM.Data.normal)
-MIRIS.HM.Data.scale[is.na(MIRIS.HM.Data.scale)] <- 0
-
-# Skewness Score After Normalization
-skewness(MIRIS.HM.Data.scale[2:7])
+MIRIS_HM_Data_scale <- predict(Normalization,MIRIS_HM_Data_normal)
+MIRIS_HM_Data_scale[is.na(MIRIS_HM_Data_scale)] <- 0
 
 # Summary Stats after Normalization
-skimmed_MIRIS_scale <- skim_to_list(MIRIS.HM.Data.scale)
+skimmed_MIRIS_scale <- skim_to_list(MIRIS_HM_Data_scale)
 skimmed_MIRIS_scale
 ```
+
 ## Comparative anaylsis 
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
-# Assigning Class to Variable  according to information from sample ID
-
-MIRIS.HM.Data.new <- MIRIS.HM.Data.scale %>% 
-  mutate(Class = case_when(grepl("^POST", Samples) ~ "post",
-    grepl("^PRE", Samples) ~ "pre",
-    grepl("^P", Samples) ~ "PI",
-    grepl("^T", Samples) ~ "TI",
-    TRUE ~ "other"
-  ))
-
-attach(MIRIS.HM.Data)
-
 # Boxplot Function 
 boxplot <- function(data){
 data %>%
-    gather(key = "feature", value = "value",-Class, -Samples) %>% 
-    ggplot(aes(x = Class, y = value, fill = Class)) +
+    gather(key = "feature", value = "value", -Samples, -NewClass) %>% 
+    ggplot(aes(x = NewClass, y = value, fill = NewClass)) +
     geom_boxplot() +
     facet_wrap(~ feature, scales = "free") +
     labs(x = "Group", y = "Value")
 }
 
-Milk.Boxplot <- boxplot(MIRIS.HM.Data.new)
-print(Milk.Boxplot)
+Milk_Boxplot <- boxplot(MIRIS_HM_Data_scale)
+print(Milk_Boxplot)
 ```
 
 ##Exploratory Data Analysis
@@ -136,10 +110,10 @@ print(Milk.Boxplot)
 
 ```{r}
 # Calculate p-values for each correlation coefficient
-p.mat <- cor_pmat(MIRIS.HM.Data.scale[2:7], method = "pearson")
+p_mat <- cor_pmat(MIRIS_HM_Data_scale[2:7], method = "pearson")
 
 # Calculate correlation matrix using Pearson correlation
-correlationMatrix <- cor(MIRIS.HM.Data.scale[2:7], method = "pearson")
+correlationMatrix <- cor(MIRIS_HM_Data_scale[2:7], method = "pearson")
 
 # Visualize the correlation matrix using ggcorrplot
 ggcorrplot(
@@ -147,14 +121,14 @@ ggcorrplot(
   hc.order = TRUE,   # Hierarchical clustering for reordering variables
   type = "lower",    # Show only the lower triangle of the correlation matrix
   lab = TRUE,        # Show labels for variables
-  p.mat = p.mat      # Overlay p-values on the plot
+  p.mat = p_mat      # Overlay p-values on the plot
 )
 ```
 ### Covariance 
 
 ```{r}
 # Calculate covariance matrix
-cov_matrix <- cov(MIRIS.HM.Data.scale[2:7], method = "pearson")
+cov_matrix <- cov(MIRIS_HM_Data_scale[2:7], method = "pearson")
 
 cov_matrix <- cov2cor(cov_matrix)
 cov_df_long <- melt(cov_matrix)
@@ -175,32 +149,33 @@ print(plot)
 
 # PCA 
 ```{r}
-MIRIS.HM.PCA <- princomp(MIRIS.HM.Data.new[2:7])
+
+MIRIS_HM_PCA <- prcomp(MIRIS_HM_Data_scale[2:7], scale = TRUE, center = TRUE)
 
 #Visualization of PCA
-fviz_pca_ind(MIRIS.HM.PCA,
+fviz_pca_ind(MIRIS_HM_PCA,
              geom = "point",
-             habillage = MIRIS.HM.Data.new$Class,
+             habillage = MIRIS_HM_Data_scale$NewClass,
              palette = c("blue", "red","green","yellow"),
              addEllipses = TRUE,
              ellipse.type="confidence",
              ggtheme = theme_bw(),
              title = "PCA plot for HM Fatty Acids")
 #Scree plot 
-fviz_eig(MIRIS.HM.PCA, 
+fviz_eig(MIRIS_HM_PCA, 
          addlabels = TRUE, 
          ylim = c(0, 70),
          main="Scree Plot Fatty Acids")
 
 # Variable plot
-fviz_pca_var(MIRIS.HM.PCA, col.var = "red")
+fviz_pca_var(MIRIS_HM_PCA, col.var = "red")
 # Contribution of each Variable
-var <- get_pca_var(MIRIS.HM.PCA)
-PC1<-fviz_contrib(MIRIS.HM.PCA, "var", axes=1, xtickslab.rt=90)
-PC2<-fviz_contrib(MIRIS.HM.PCA, "var", axes=2, xtickslab.rt=90)
-PC3<-fviz_contrib(MIRIS.HM.PCA, "var", axes=3, xtickslab.rt=90)
-PC4<-fviz_contrib(MIRIS.HM.PCA, "var", axes=4, xtickslab.rt=90)
-PC5<-fviz_contrib(MIRIS.HM.PCA, "var", axes=5, xtickslab.rt=90)
+var <- get_pca_var(MIRIS_HM_PCA)
+PC1<-fviz_contrib(MIRIS_HM_PCA, "var", axes=1, xtickslab.rt=90)
+PC2<-fviz_contrib(MIRIS_HM_PCA, "var", axes=2, xtickslab.rt=90)
+PC3<-fviz_contrib(MIRIS_HM_PCA, "var", axes=3, xtickslab.rt=90)
+PC4<-fviz_contrib(MIRIS_HM_PCA, "var", axes=4, xtickslab.rt=90)
+PC5<-fviz_contrib(MIRIS_HM_PCA, "var", axes=5, xtickslab.rt=90)
 
 plot(PC1,main = "Variables percentage contribution of first Principal Components")
 plot(PC2,main = "Variables percentage contribution of Second Principal Components")
@@ -214,43 +189,79 @@ plot(PC5,main = "Variables percentage contribution of Fifth Principal Components
 ```{r}
 library(rstatix)
 
-MIRIS.HM.Data.new$Class <-  factor(MIRIS.HM.Data.new$Class)
-# Perform Leven's test for each continuous variable
-for (i in 2:7) {
-  # Create the formula
-  formula <- as.formula(paste(names(MIRIS.HM.Data.new)[i], "~ Class"))
+# Define the Continuous Variables and Categorical Variable
+continuous_vars <- colnames(MIRIS_HM_Data_scale[2:7])
+categorical_var <- "NewClass"
+
+
+# Initialize an empty data frame to store the results
+shapiro_results <- data.frame(Variable = character(0), P_Value = numeric(0), Significant = character(0), stringsAsFactors = FALSE)
+
+# Loop through the continuous variables
+for (vars in continuous_vars) {
+  data_vector <- MIRIS_HM_Data_scale[[vars]]
+  shapiro_result <- shapiro.test(data_vector)
   
-  # Perform Levene's test
-  var_test <- leveneTest(formula, data = MIRIS.HM.Data.new)
-  
-  # Print the variable name and the test results
-  cat("Variable:", names(MIRIS.HM.Data.new)[i], "\n")
-  print(var_test)
-  cat("\n")
+  # Append the results to the data frame
+  shapiro_results <- rbind(shapiro_results, data.frame(Variable = vars, P_Value = shapiro_result$p.value, Significant = ifelse(shapiro_result$p.value < 0.05, "**", ".")))
 }
 
-# Perform Kruskal-Wallis test for each variable
- for (i in 2:7){
- 
-  formula <- as.formula(paste(names(MIRIS.HM.Data.new)[i], "~ Class"))
-  kruskal_model <- kruskal.test(formula, data = MIRIS.HM.Data.new)
- # Print the variable name and the test results
-  cat("Variable:", names(MIRIS.HM.Data.new)[i], "\n")
-  print(kruskal_model)
-  cat("\n")
+# Print the results as a table
+print(shapiro_results)
+```
+
+### Leven's Test
+
+```{r}
+
+# perform levene's test to see if all group has equal variance
+
+# Update the levels of the New Class variable
+MIRIS_HM_Data_scale$NewClass <- factor(MIRIS_HM_Data_scale$NewClass)
+
+
+# Initialize an empty data frame to store the results
+levene_results <- data.frame(Variable = character(0), F_Value = numeric(0), P_Value = numeric(0), stringsAsFactors = FALSE)
+
+# Loop through the continuous variables
+for (vars in continuous_vars) {
+  formula <- as.formula(paste(vars, "~", categorical_var))
+  var_test <- leveneTest(formula, data = MIRIS_HM_Data_scale)
+  levene_results <- rbind(levene_results, data.frame(Variable = vars, F_Value = var_test$`F value`, P_Value = var_test$`Pr(>F)`, Significant = ifelse(var_test$`Pr(>F)` < 0.05, "**", "-")))
 }
+
+print(levene_results)
+
+```
+
+#### KrusKal-Wallis test 
+
+```{r}
+# Perform Kruskal-Wallis test for each variable
+# Initialize an empty data frame to store the Kruskal-Wallis results
+kruskal_results <- data.frame(Variable = character(0), H_Statistic = numeric(0), P_Value = numeric(0), stringsAsFactors = FALSE)
+
+# Loop through the continuous variables
+for (vars in continuous_vars) {
+  formula <- as.formula(paste(vars, "~", categorical_var))
+  kruskal_model <- kruskal.test(formula, data = MIRIS_HM_Data_scale)
+  
+  # Append the results to the data frame
+  kruskal_results <- rbind(kruskal_results, data.frame(Variable = vars, H_Statistic = kruskal_model$statistic, P_Value = kruskal_model$p.value, Significant = ifelse(kruskal_model$p.value < 0.05, "**", "-")))
+}
+
+print(kruskal_results)
 
 # Perform pairwise dunn test and display summary for each model
-for (i in 2:7){
- 
-  formula <- as.formula(paste(names(MIRIS.HM.Data.new)[i], "~ Class"))
-  pairwise_test <- dunn_test(formula, data = MIRIS.HM.Data.new, p.adjust.method = "bonferroni")
-# Print the variable name and the test results
-  cat("Variable:", names(MIRIS.HM.Data.new)[i], "\n")
+for (var in continuous_vars) {
+  formula <- as.formula(paste(var, "~", categorical_var))
+  pairwise_test <- dunn_test(formula, data = MIRIS_HM_Data_scale, p.adjust.method = "bonferroni")
+  cat("Variable:", var)
   print(pairwise_test)
-  cat("\n")
+  cat("/n")
 }
 ```
+
 ```{r message=FALSE, warning=FALSE}
 library(ggstatsplot)
 library(rlang)
@@ -258,8 +269,8 @@ library(rlang)
 StatBoxplot <- function(y) {
   y_sym <- sym(y)
   plot <- ggbetweenstats(
-    data = MIRIS.HM.Data.new,
-    x = Class,
+    data = MIRIS_HM_Data_scale,
+    x = NewClass,
     y = !!y_sym,
     type = "nonparametric",
     plot.type = "box",
@@ -291,7 +302,7 @@ ctrl <- rfeControl(functions = rfFuncs,
                    repeats = 10,
                    verbose = FALSE)
 
-rfe_Profile <- rfe(x=MIRIS.HM.Data.new[, 2:7], y=MIRIS.HM.Data.new$Class,
+rfe_Profile <- rfe(x=MIRIS_HM_Data_scale[, 2:7], y=MIRIS_HM_Data_scale$NewClass,
                  sizes = c(1:8),
                  rfeControl = ctrl)
 
@@ -302,7 +313,7 @@ rfe_Profile
 ```{r}
 # Split the data into training and test sets (80% training, 20% test)
 Train_Index <- createDataPartition(
-  y = MIRIS.HM.Data.scale$TS,
+  y = MIRIS_HM_Data_scale$TS,
   ## the outcome data are needed
   p = .70,
   ## The percentage of data in the
@@ -310,8 +321,8 @@ Train_Index <- createDataPartition(
   list = FALSE
 )
 
-train_Data <- MIRIS.HM.Data[ Train_Index, -1]
-test_Data  <- MIRIS.HM.Data[-Train_Index, -1]
+train_Data <- MIRIS_HM_Data[ Train_Index, -1]
+test_Data  <- MIRIS_HM_Data[-Train_Index, -1]
 ```
 
 # linear regression model
@@ -332,7 +343,7 @@ lm_model
 
 ```{r}
 # Train the model using Linear SVM and predict on the Test data.
-Svm_model <-  train(TS ~ ., data=train_Data, method='svmRadial', trControl = fitControl)
+Svm_model <-  train(TS ~ ., data = train_Data, method = 'svmRadial', trControl = fitControl)
 
 # predict on test data
 SVM_model_fitted <- predict(Svm_model, test_Data)

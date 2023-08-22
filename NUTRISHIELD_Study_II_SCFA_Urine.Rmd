@@ -251,6 +251,7 @@ print(plot)
 ### Statistical Test
 
 ##### Shapiro Test
+
 ```{r}
 library(rstatix)
 
@@ -297,6 +298,8 @@ for (vars in continuous_vars) {
 
 levene_results
 ```
+
+#### Kruskal-Wallis test
 
 ```{r}
 # Perform Kruskal-Wallis test for each variable

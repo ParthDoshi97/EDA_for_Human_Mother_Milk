@@ -100,10 +100,10 @@ skewness(Qtrap.filterd.data[3:54])
 ```{r}
 #scaling Of Data
 # using caret lib to preprocess data
-#Normalization <- preProcess(Qtrap.filterd.data, method = "BoxCox",na.remove = TRUE )
+Normalization <- preProcess(Qtrap.filterd.data, method = "BoxCox",na.remove = TRUE )
 
 # standardize the preprocessed data
-#Qtrap.filterd.data.normal <- predict(Normalization,Qtrap.filterd.data)
+Qtrap.filterd.data.normal <- predict(Normalization,Qtrap.filterd.data)
 
 #scaling Of Data
 # using caret lib to preprocess data

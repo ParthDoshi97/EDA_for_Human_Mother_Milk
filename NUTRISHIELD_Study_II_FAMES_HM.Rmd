@@ -108,45 +108,46 @@ Preprocess <- preProcess(NSII_FAMES_HM, method = "BoxCox")
 NSII_FAMES_HM_Normal <- predict(Preprocess,NSII_FAMES_HM)
 
 # Scaling of  data
-#Autoscale <- preProcess(NSII_FAMES_HM_Normal, method = c("center","scale"))
+Autoscale <- preProcess(NSII_FAMES_HM_Normal, method = c("center","scale"))
 # standardize the preprocessed data
-#NSII_FAMES_HM_Normal<- predict(Autoscale,NSII_FAMES_HM_Normal)
-#NSII_FAMES_HM_Normal <- NSII_FAMES_HM_Normal %>% 
+NSII_FAMES_HM_Normal_Scaled<- predict(Autoscale, NSII_FAMES_HM_Normal)
+
+#NSII_FAMES_HM_Normal <- NSII_FAMES_HM_Normal %>%
 #  replace(sapply(., is.infinite), 0) %>%
 #  replace(sapply(.,is.na), 0)
   
 
-skewness(NSII_FAMES_HM_Normal[2:30])
+skewness(NSII_FAMES_HM_Normal_Scaled[2:30])
 
-skimmed_FAMES_Scale <- skim(NSII_FAMES_HM_Normal)
+skimmed_FAMES_Scale <- skim(NSII_FAMES_HM_Normal_Scaled)
 skimmed_FAMES_Scale
 
 
 
 # Converting it into long 
-NSII_FAMES_HM_Normal.long <- gather(NSII_FAMES_HM_Normal[2:15])
-NSII_FAMES_HM_Normal.long.subset <- gather(NSII_FAMES_HM_Normal[16:30])
+NSII_FAMES_HM_Normal_Scaled.long <- gather(NSII_FAMES_HM_Normal_Scaled[2:15])
+NSII_FAMES_HM_Normal_Scaled.long.subset <- gather(NSII_FAMES_HM_Normal_Scaled[16:30])
 
 # box plot after distribution
-NSII_FAMES_HM_Normal.boxplot.A <- ggplot(NSII_FAMES_HM_Normal.long, aes(x = value, y = key, fill = key))+
+NSII_FAMES_HM_Normal_Scaled.boxplot.A <- ggplot(NSII_FAMES_HM_Normal_Scaled.long, aes(x = value, y = key, fill = key))+
   geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
   labs(title = "Scaled FAMES Data Boxplot",)
-print(NSII_FAMES_HM_Normal.boxplot.A)
+print(NSII_FAMES_HM_Normal_Scaled.boxplot.A)
 
 
 # box plot after distribution
-NSII_FAMES_HM_Normal.boxplot.B <- ggplot(NSII_FAMES_HM_Normal.long.subset, aes(x = value, y = key, fill = key))+
+NSII_FAMES_HM_Normal_Scaled.boxplot.B <- ggplot(NSII_FAMES_HM_Normal_Scaled.long.subset, aes(x = value, y = key, fill = key))+
   geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
   labs(title = "Scaled FAMES Data Boxplot",)
-print(NSII_FAMES_HM_Normal.boxplot.B)
+print(NSII_FAMES_HM_Normal_Scaled.boxplot.B)
 ```
 
 ### Box plot of data distribution of each group (Post,Pre,PI,TI)
 
 ```{r}
-NSII_FAMES_HM_Normal_A <- NSII_FAMES_HM_Normal[, c(1:15, 31)]
-NSII_FAMES_HM_Normal_B <- cbind(NSII_FAMES_HM_Normal[1], NSII_FAMES_HM_Normal[16:31])
-str(NSII_FAMES_HM_Normal_A)
+NSII_FAMES_HM_Normal_Scaled_A <- NSII_FAMES_HM_Normal_Scaled[, c(1:15, 31)]
+NSII_FAMES_HM_Normal_Scaled_B <- cbind(NSII_FAMES_HM_Normal_Scaled[1], NSII_FAMES_HM_Normal_Scaled[16:31])
+str(NSII_FAMES_HM_Normal_Scaled_A)
 
 # Define the boxplot function
 boxplot <- function(data) {
@@ -155,19 +156,19 @@ boxplot <- function(data) {
     ggplot(aes(x = NewClass, y = value, fill = NewClass)) +
     geom_boxplot() +
     facet_wrap(~ feature, scales = "free") +
-    labs(title = "Boxplot of NSII_FAMES_HM_Normal",
+    labs(title = "Boxplot of NSII_FAMES_HM_Normal_Scaled",
          x = "NewClass",
          y = "Value")
 }
 
 
-# Create the boxplot for NSII_FAMES_HM_Normal_A
-NSII_FAMES_HM_Normal_A_boxplot <- boxplot(NSII_FAMES_HM_Normal_A)
-print(NSII_FAMES_HM_Normal_A_boxplot)
+# Create the boxplot for NSII_FAMES_HM_Normal_Scaled_A
+NSII_FAMES_HM_Normal_Scaled_A_boxplot <- boxplot(NSII_FAMES_HM_Normal_Scaled_A)
+print(NSII_FAMES_HM_Normal_Scaled_A_boxplot)
 
-# Create the boxplot for NSII_FAMES_HM_Normal_B
-NSII_FAMES_HM_Normal_B_boxplot <- boxplot(NSII_FAMES_HM_Normal_B)
-print(NSII_FAMES_HM_Normal_B_boxplot)
+# Create the boxplot for NSII_FAMES_HM_Normal_Scaled_B
+NSII_FAMES_HM_Normal_Scaled_B_boxplot <- boxplot(NSII_FAMES_HM_Normal_Scaled_B)
+print(NSII_FAMES_HM_Normal_Scaled_B_boxplot)
 
 
 ```
@@ -176,18 +177,17 @@ print(NSII_FAMES_HM_Normal_B_boxplot)
 
 ```{r}
 # Calculate p-values for each correlation coefficient
-p.mat <- cor_pmat(NSII_FAMES_HM_Normal[3:27], method = "pearson")
+p_mat <- cor_pmat(NSII_FAMES_HM_Normal_Scaled[2:30], method = "pearson")
 
 # Calculate correlation matrix using Pearson correlation
-correlationMatrix <- cor(NSII_FAMES_HM_Normal[3:27], method = "pearson")
+correlationMatrix <- cor(NSII_FAMES_HM_Normal_Scaled[3:30], method = "pearson")
 
 # Visualize the correlation matrix using ggcorrplot
 ggcorrplot(
   correlationMatrix,
   hc.order = FALSE,   # Hierarchical clustering for reordering variables
   type = "lower",    # Show only the lower triangle of the correlation matrix
-  lab = FALSE,        # Show labels for variables
-  p.mat = p.mat      # Overlay p-values on the plot
+  lab = FALSE        # Show labels for variables     
 )
 ```
 
@@ -197,33 +197,68 @@ ggcorrplot(
 library(rstatix)
 
 # Get the names of the continuous variables
-continuous.vars <- colnames(NSII_FAMES_HM_Normal[2:30])
-categorical.var <- "NewClass"
+continuous_vars <- colnames(NSII_FAMES_HM_Normal_Scaled[2:30])
+categorical_var <- "NewClass"
 
-NSII_FAMES_HM_Normal$NewClass <- factor(NSII_FAMES_HM_Normal$NewClass)
 
-# perform levene's test to see if all group has equal variance
-for (vars in continuous.vars) {
-  formula <- as.formula(paste(vars, "~", categorical.var))
-  var_test <- levene_test(formula, data = NSII_FAMES_HM_Normal)
-  cat("Variable:", vars, "\n")
-  print(var_test)
-  cat("\n")
+# Initialize an empty data frame to store the results
+shapiro_results <- data.frame(Variable = character(0), P_Value = numeric(0), Significant = character(0), stringsAsFactors = FALSE)
+
+# Loop through the continuous variables
+for (vars in continuous_vars) {
+  data_vector <- NSII_FAMES_HM_Normal_Scaled[[vars]]
+  shapiro_result <- shapiro.test(data_vector)
+  
+  # Append the results to the data frame
+  shapiro_results <- rbind(shapiro_results, data.frame(Variable = vars, P_Value = shapiro_result$p.value, Significant = ifelse( shapiro_result$p.value < 0.05, "**", "-")))
 }
+
+print(shapiro_result)
+```
+
+### Levene's test for Homogeneity of Variance
+
+```{r}
+
+# Catgorial variable to Factor
+NSII_FAMES_HM_Normal_Scaled$NewClass <- factor(NSII_FAMES_HM_Normal_Scaled$NewClass)
+
+# Initialize an empty data frame to store the results
+levene_results <- data.frame(Variable = character(0), F_Value = numeric(0), P_Value = numeric(0), stringsAsFactors = FALSE)
+
+# Loop through the continuous variables
+for (vars in continuous_vars) {
+  formula <- as.formula(paste(vars, "~", categorical_var))
+  var_test <- leveneTest(formula, data = NSII_FAMES_HM_Normal_Scaled)
+  levene_results <- rbind(levene_results, data.frame(Variable = vars, F_Value = var_test$`F value`, P_Value = var_test$`Pr(>F)`, Significant  = ifelse(var_test$`Pr(>F)` < 0.05, "**", "-")))
+}
+
+print(levene_results)
+```
+
+### Kruskal walis Test
+
+```{r}
+# Perform Kruskal-Wallis test for each variable
+# Initialize an empty data frame to store the Kruskal-Wallis results
+kruskal_results <- data.frame(Variable = character(0), H_Statistic = numeric(0), P_Value = numeric(0), stringsAsFactors = FALSE)
+
+# Loop through the continuous variables
+for (vars in continuous_vars) {
+  formula <- as.formula(paste(vars, "~", categorical_var))
+  kruskal_model <- kruskal.test(formula, data = NSII_FAMES_HM_Normal_Scaled)
+  
+  # Append the results to the data frame
+  kruskal_results <- rbind(kruskal_results, data.frame(Variable = vars, H_Statistic = kruskal_model$statistic, P_Value = kruskal_model$p.value, Significant = ifelse(kruskal_model$p.value < 0.05, "**", "-")))
+
+}
+print(kruskal_results)
+
 
 # Perform Kruskal-Wallis test for each variable
 for (vars in continuous.vars) {
   formula <- as.formula(paste(vars, "~", categorical.var))
-  kruskal_model <- kruskal.test(formula, data = NSII_FAMES_HM_Normal)
-  cat("Variable:", vars, "\n")
-  print(kruskal_model)
-  cat("\n")
-}
-
-# Perform Kruskal-Wallis test for each variable
-for (vars in continuous.vars) {
-  formula <- as.formula(paste(vars, "~", categorical.var))
- pairwise_test <- dunn_test(formula, data = NSII_FAMES_HM_Normal)
+ pairwise_test <- dunn_test(formula, data = NSII_FAMES_HM_Normal_Scaled)
   cat("Variable:", vars, "\n")
   print(pairwise_test)
   cat("\n")
@@ -238,7 +273,7 @@ for (var in continuous.vars) {
   formula <- as.formula(paste(var, "~ NewClass"))
   
   # Fit the linear regression model
-  regression.model <- lm(formula, data = NSII_FAMES_HM_Normal)
+  regression.model <- lm(formula, data = NSII_FAMES_HM_Normal_Scaled)
   
   # Print the regression coefficients and summary
   cat("Variable:", var, "\n")
@@ -253,12 +288,12 @@ for (var in continuous.vars) {
 ##### Principle component Analysis
 
 ```{r}
-NSII_FAMES_HM_PCA <- prcomp(NSII_FAMES_HM_Normal[3:27], scale. = TRUE, center = TRUE)
+NSII_FAMES_HM_PCA <- prcomp(NSII_FAMES_HM_Normal_Scaled[3:27], scale. = TRUE, center = TRUE)
 
 #Visualization of PCA
 fviz_pca_ind(NSII_FAMES_HM_PCA,
              geom = "point",
-             habillage = NSII_FAMES_HM_Normal$NewClass,
+             habillage = NSII_FAMES_HM_Normal_Scaled$NewClass,
              palette = c("blue", "red","green","yellow"),
              addEllipses = TRUE,
              ellipse.type="confidence",
@@ -277,12 +312,12 @@ fviz_pca_var(NSII_FAMES_HM_PCA, col.var = "red")
 # feature selection
 
 ```{r}
-NSII_FAMES_HM_Normal$NewClass <- factor(NSII_FAMES_HM_Normal$NewClass)
+NSII_FAMES_HM_Normal_Scaled$NewClass <- factor(NSII_FAMES_HM_Normal_Scaled$NewClass)
 
 # define the control using a random forest selection function
 control <- rfeControl(functions=rfFuncs, method="cv", number=10)
 # run the RFE algorithm
-results <- rfe(NSII_FAMES_HM_Normal[,2:30], NSII_FAMES_HM_Normal[,31], sizes=c(1:27), rfeControl=control)
+results <- rfe(NSII_FAMES_HM_Normal_Scaled[,2:30], NSII_FAMES_HM_Normal_Scaled[,31], sizes=c(1:27), rfeControl=control)
 # summarize the results
 print(results)
 # list the chosen features
@@ -291,9 +326,9 @@ predictors(results)
 
 library(Boruta)
 # Decide if a variable is important or not using Boruta
-boruta_output <- Boruta(NewClass ~ ., data=na.omit(NSII_FAMES_HM_Normal), doTrace=2)  # perform Boruta search
+boruta_output <- Boruta(NewClass ~ ., data = na.omit(NSII_FAMES_HM_Normal_Scaled), doTrace = 2)  # perform Boruta search
 
 boruta_signif <- names(boruta_output$finalDecision[boruta_output$finalDecision %in% c("Confirmed", "Tentative")])  # collect Confirmed and Tentative variables
 
-plot(boruta_output, cex.axis=.7, las=2, xlab="", main="Variable Importance")  # plot variable
+plot(boruta_output, cex.axis=.7, las= 2, xlab = "", main = "Variable Importance")  # plot variable
 ```
